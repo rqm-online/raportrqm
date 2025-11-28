@@ -1,0 +1,600 @@
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '../../lib/supabase';
+import type { Student, SettingsLembaga, ReportCard, Semester } from '../../types';
+import { Button } from '../../components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Label } from '../../components/ui/label';
+import { ScoreInput } from '../../components/raport/ScoreInput';
+import { TahfidzInput } from '../../components/raport/TahfidzInput';
+import { calculateAverage, calculateFinalScore, formatScore, getPredikat } from '../../utils/grading';
+import { Save, Printer, Plus } from 'lucide-react';
+import { Link } from 'react-router-dom';
+
+// Default structure for new report card
+const defaultAkhlak = {
+    "Adab Terhadap Guru": 10,
+    "Adab Terhadap Teman": 10,
+    "Kerajinan": 10,
+    "Kebersihan": 10,
+};
+
+const defaultKedisiplinan = {
+    "Sholat Berjamaah": 10,
+    "Kehadiran": 10,
+    "Ketepatan Waktu": 10,
+};
+
+const defaultKognitif = {
+    "Tahfidz": { "Juz 30": 10, "Juz 29": 10 }, // Legacy default, not used for new input
+    "Tahsin": { "Makhraj": 10, "Tajwid": 10 },
+};
+
+export default function RaportInput() {
+    const queryClient = useQueryClient();
+    const [selectedStudentId, setSelectedStudentId] = useState<string>('');
+    const [activeSemester, setActiveSemester] = useState<Semester | null>(null);
+
+    // Form State
+    const [akhlak, setAkhlak] = useState<Record<string, number>>(defaultAkhlak);
+    const [kedisiplinan, setKedisiplinan] = useState<Record<string, number>>(defaultKedisiplinan);
+
+    // Tahfidz State
+    const [tahfidzScore, setTahfidzScore] = useState(10);
+    const [tahfidzProgress, setTahfidzProgress] = useState<Record<string, { kb: number; kh: number }>>({});
+
+    const [tahsin, setTahsin] = useState<Record<string, number>>(defaultKognitif.Tahsin);
+    const [uasTulis, setUasTulis] = useState(10);
+    const [uasLisan, setUasLisan] = useState(10);
+    const [catatan, setCatatan] = useState('');
+
+    // Fetch Data
+    const { data: students } = useQuery({
+        queryKey: ['students'],
+        queryFn: async () => {
+            const { data } = await supabase.from('students').select('*').eq('is_active', true).order('nama');
+            return data as Student[];
+        }
+    });
+
+    const { data: activeSemesterData } = useQuery({
+        queryKey: ['active_semester'],
+        queryFn: async () => {
+            const { data } = await supabase.from('semesters').select('*, academic_year:academic_years(*)').eq('is_active', true).single();
+            return data as Semester & { academic_year: any };
+        }
+    });
+
+    useEffect(() => {
+        if (activeSemesterData) setActiveSemester(activeSemesterData);
+    }, [activeSemesterData]);
+
+    const { data: settings } = useQuery({
+        queryKey: ['settings'],
+        queryFn: async () => {
+            const { data } = await supabase.from('settings_lembaga').select('*').single();
+            return data as SettingsLembaga;
+        }
+    });
+
+    // Fetch existing report
+    const { data: existingReport } = useQuery({
+        queryKey: ['report_card', selectedStudentId, activeSemester?.id],
+        enabled: !!selectedStudentId && !!activeSemester?.id,
+        queryFn: async () => {
+            const { data } = await supabase
+                .from('report_cards')
+                .select('*')
+                .eq('student_id', selectedStudentId)
+                .eq('semester_id', activeSemester!.id)
+                .single();
+            return data as ReportCard;
+        }
+    });
+
+    // Load existing data
+    useEffect(() => {
+        if (selectedStudentId && activeSemester) {
+            const draftKey = `draft_raport_${selectedStudentId}_${activeSemester.id}`;
+
+            if (existingReport) {
+                // Load from saved report
+                setAkhlak(existingReport.akhlak || defaultAkhlak);
+                setKedisiplinan(existingReport.kedisiplinan || defaultKedisiplinan);
+                const kognitif = existingReport.kognitif || defaultKognitif;
+
+                // Tahfidz score might be in kognitif JSON for legacy, or calculated
+                // We'll rely on TahfidzInput to set the score via callback if it has data
+                // But if it's a legacy report, we might need to handle it. 
+                // For now, let's assume TahfidzInput handles it.
+
+                setTahsin(kognitif.Tahsin || defaultKognitif.Tahsin);
+                setUasTulis(existingReport.uas_tulis || 10);
+                setUasLisan(existingReport.uas_lisan || 10);
+                setCatatan(existingReport.catatan || '');
+
+                // Clear draft
+                localStorage.removeItem(draftKey);
+            } else {
+                // Try to load from draft
+                const savedDraft = localStorage.getItem(draftKey);
+                if (savedDraft) {
+                    try {
+                        const draft = JSON.parse(savedDraft);
+                        setAkhlak(draft.akhlak || defaultAkhlak);
+                        setKedisiplinan(draft.kedisiplinan || defaultKedisiplinan);
+                        setTahsin(draft.tahsin || defaultKognitif.Tahsin);
+                        setUasTulis(draft.uasTulis || 10);
+                        setUasLisan(draft.uasLisan || 10);
+                        setCatatan(draft.catatan || '');
+                        // Tahfidz draft loading is skipped for now as it's complex
+                    } catch (e) {
+                        resetForm();
+                    }
+                } else {
+                    resetForm();
+                }
+            }
+        }
+    }, [existingReport, selectedStudentId, activeSemester]);
+
+    const resetForm = () => {
+        setAkhlak(defaultAkhlak);
+        setKedisiplinan(defaultKedisiplinan);
+        setTahsin(defaultKognitif.Tahsin);
+        setUasTulis(10);
+        setUasLisan(10);
+        setCatatan('');
+        setTahfidzScore(10);
+        setTahfidzProgress({});
+    };
+
+    // Auto-save to localStorage
+    useEffect(() => {
+        if (selectedStudentId && activeSemester) {
+            const draftKey = `draft_raport_${selectedStudentId}_${activeSemester.id}`;
+            const draft = {
+                akhlak,
+                kedisiplinan,
+                tahsin,
+                uasTulis,
+                uasLisan,
+                catatan,
+                timestamp: new Date().toISOString()
+            };
+            localStorage.setItem(draftKey, JSON.stringify(draft));
+        }
+    }, [akhlak, kedisiplinan, tahsin, uasTulis, uasLisan, catatan, selectedStudentId, activeSemester]);
+
+    const selectedStudent = students?.find(s => s.id === selectedStudentId);
+    const isShiftSiang = selectedStudent?.shift === 'Siang';
+
+    // Calculations
+    const akhlakAvg = calculateAverage(akhlak);
+
+    // For kedisiplinan, exclude Shalat Berjamaah if shift is Siang
+    const kedisiplinanForCalc = isShiftSiang
+        ? Object.fromEntries(Object.entries(kedisiplinan).filter(([key]) => key !== "Sholat Berjamaah"))
+        : kedisiplinan;
+    const kedisiplinanAvg = calculateAverage(kedisiplinanForCalc);
+
+    const tahsinAvg = calculateAverage(tahsin);
+    const kognitifScore = (tahfidzScore + tahsinAvg + uasTulis + uasLisan) / 4;
+
+    const finalScore = settings ? calculateFinalScore(akhlakAvg, kedisiplinanAvg, kognitifScore, settings) : 0;
+    const predikat = settings ? getPredikat(finalScore, settings.skala_penilaian) : '-';
+
+    const saveMutation = useMutation({
+        mutationFn: async () => {
+            if (!selectedStudentId || !activeSemester) return;
+
+            const payload = {
+                student_id: selectedStudentId,
+                semester_id: activeSemester.id,
+                akhlak,
+                kedisiplinan,
+                kognitif: { Tahsin: tahsin }, // Tahfidz stored separately now
+                uas_tulis: uasTulis,
+                uas_lisan: uasLisan,
+                nilai_akhir_akhlak: akhlakAvg,
+                nilai_akhir_kedisiplinan: kedisiplinanAvg,
+                nilai_akhir_kognitif: kognitifScore,
+                catatan
+            };
+
+            let reportId = existingReport?.id;
+
+            if (reportId) {
+                await supabase.from('report_cards').update(payload).eq('id', reportId);
+            } else {
+                const { data, error } = await supabase.from('report_cards').insert([payload]).select().single();
+                if (error) throw error;
+                reportId = data.id;
+            }
+
+            // Save Tahfidz Progress
+            if (reportId && Object.keys(tahfidzProgress).length > 0) {
+                const progressRecords = Object.entries(tahfidzProgress).map(([surahId, scores]) => ({
+                    report_card_id: reportId,
+                    surah_id: surahId,
+                    kb: scores.kb,
+                    kh: scores.kh
+                }));
+
+                // Upsert progress
+                const { error: progressError } = await supabase
+                    .from('tahfidz_progress')
+                    .upsert(progressRecords, { onConflict: 'report_card_id,surah_id' });
+
+                if (progressError) throw progressError;
+            }
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['report_card'] });
+            queryClient.invalidateQueries({ queryKey: ['tahfidz_progress'] });
+            if (selectedStudentId && activeSemester) {
+                localStorage.removeItem(`draft_raport_${selectedStudentId}_${activeSemester.id}`);
+            }
+            alert('Raport berhasil disimpan');
+        },
+        onError: (error: any) => {
+            alert('Gagal menyimpan raport: ' + error.message);
+        }
+    });
+
+    if (!activeSemester) return <div>Belum ada tahun ajaran aktif. Silakan set di menu Tahun Ajaran.</div>;
+
+    if (!settings || !settings.bobot_akhlak) {
+        return (
+            <div className="p-6 bg-yellow-50 border border-yellow-200 rounded-md">
+                <h2 className="text-lg font-bold text-yellow-800 mb-2">Pengaturan Belum Lengkap</h2>
+                <p className="text-yellow-700">
+                    Silakan lengkapi <strong>Bobot Penilaian</strong> di menu <Link to="/settings" className="underline font-semibold">Pengaturan</Link> terlebih dahulu.
+                </p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6 pb-20">
+            <div className="flex justify-between items-center">
+                <div>
+                    <h1 className="text-2xl font-bold">Input Raport</h1>
+                    <p className="text-gray-500">
+                        {activeSemester.academic_year?.tahun_ajaran} - Semester {activeSemester.nama}
+                    </p>
+                </div>
+                {existingReport && (
+                    <Link to={`/print/${existingReport.id}`} target="_blank">
+                        <Button variant="outline">
+                            <Printer className="mr-2 h-4 w-4" /> Cetak Raport
+                        </Button>
+                    </Link>
+                )}
+            </div>
+
+            <Card>
+                <CardContent className="pt-6">
+                    <Label>Pilih Santri</Label>
+                    <select
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        value={selectedStudentId}
+                        onChange={(e) => setSelectedStudentId(e.target.value)}
+                    >
+                        <option value="">-- Pilih Santri --</option>
+                        {students?.map(s => (
+                            <option key={s.id} value={s.id}>{s.nama} ({s.nis}) - Shift {s.shift || 'Sore'}</option>
+                        ))}
+                    </select>
+                    {selectedStudent && isShiftSiang && (
+                        <p className="text-sm text-blue-600 mt-2">
+                            ℹ️ Santri shift Siang - Nilai Shalat Berjamaah tidak diinput
+                        </p>
+                    )}
+                </CardContent>
+            </Card>
+
+            {selectedStudentId && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* AKHLAK */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex justify-between items-center">
+                                Akhlak (10-100)
+                                <span className="text-blue-600">{formatScore(akhlakAvg)}</span>
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            {/* Bulk Input Akhlak */}
+                            <Card className="bg-blue-50 border-blue-200">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-sm flex items-center gap-2">
+                                        <Plus className="h-4 w-4" />
+                                        Input Nilai Massal
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="flex flex-col md:flex-row gap-4 items-end">
+                                        <div className="space-y-2 flex-1 w-full">
+                                            <label className="text-xs font-medium">Nilai (10-100)</label>
+                                            <input
+                                                type="number"
+                                                min="10"
+                                                max="100"
+                                                className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                                                placeholder="Contoh: 85"
+                                                id="bulk-akhlak-input"
+                                            />
+                                        </div>
+                                        <Button
+                                            onClick={() => {
+                                                const input = document.getElementById('bulk-akhlak-input') as HTMLInputElement;
+                                                const value = parseInt(input.value);
+
+                                                if (!value) {
+                                                    alert('Mohon isi nilai terlebih dahulu');
+                                                    return;
+                                                }
+                                                if (value < 10 || value > 100) {
+                                                    alert('Nilai harus antara 10-100');
+                                                    return;
+                                                }
+
+                                                const updated: Record<string, number> = {};
+                                                Object.keys(akhlak).forEach(key => {
+                                                    updated[key] = value;
+                                                });
+                                                setAkhlak(updated);
+                                                input.value = ''; // Clear input
+                                            }}
+                                            className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white"
+                                        >
+                                            Terapkan ke Semua
+                                        </Button>
+                                    </div>
+                                    <p className="text-xs text-gray-600 mt-2">
+                                        * Nilai akan diterapkan ke semua aspek akhlak
+                                    </p>
+                                </CardContent>
+                            </Card>
+
+                            <div className="space-y-4">
+                                {Object.entries(akhlak).map(([key, val]) => (
+                                    <ScoreInput
+                                        key={key}
+                                        label={key}
+                                        value={val}
+                                        onChange={(v) => setAkhlak(prev => ({ ...prev, [key]: v }))}
+                                    />
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* KEDISIPLINAN */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex justify-between items-center">
+                                Kedisiplinan (10-100)
+                                <span className="text-blue-600">{formatScore(kedisiplinanAvg)}</span>
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            {/* Bulk Input Kedisiplinan */}
+                            <Card className="bg-blue-50 border-blue-200">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-sm flex items-center gap-2">
+                                        <Plus className="h-4 w-4" />
+                                        Input Nilai Massal
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="flex flex-col md:flex-row gap-4 items-end">
+                                        <div className="space-y-2 flex-1 w-full">
+                                            <label className="text-xs font-medium">Nilai (10-100)</label>
+                                            <input
+                                                type="number"
+                                                min="10"
+                                                max="100"
+                                                className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                                                placeholder="Contoh: 85"
+                                                id="bulk-kedisiplinan-input"
+                                            />
+                                        </div>
+                                        <Button
+                                            onClick={() => {
+                                                const input = document.getElementById('bulk-kedisiplinan-input') as HTMLInputElement;
+                                                const value = parseInt(input.value);
+
+                                                if (!value) {
+                                                    alert('Mohon isi nilai terlebih dahulu');
+                                                    return;
+                                                }
+                                                if (value < 10 || value > 100) {
+                                                    alert('Nilai harus antara 10-100');
+                                                    return;
+                                                }
+
+                                                const updated: Record<string, number> = {};
+                                                Object.keys(kedisiplinan).forEach(key => {
+                                                    // Skip Sholat Berjamaah for shift Siang
+                                                    if (isShiftSiang && key === "Sholat Berjamaah") {
+                                                        updated[key] = 0;
+                                                    } else {
+                                                        updated[key] = value;
+                                                    }
+                                                });
+                                                setKedisiplinan(updated);
+                                                input.value = ''; // Clear input
+                                            }}
+                                            className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white"
+                                        >
+                                            Terapkan ke Semua
+                                        </Button>
+                                    </div>
+                                    <p className="text-xs text-gray-600 mt-2">
+                                        * Nilai akan diterapkan ke semua aspek kedisiplinan
+                                    </p>
+                                </CardContent>
+                            </Card>
+
+                            <div className="space-y-4">
+                                {Object.entries(kedisiplinan).map(([key, val]) => {
+                                    const isDisabled = isShiftSiang && key === "Sholat Berjamaah";
+                                    return (
+                                        <div key={key} className={isDisabled ? 'opacity-50' : ''}>
+                                            <ScoreInput
+                                                label={key + (isDisabled ? ' (Tidak dinilai - Shift Siang)' : '')}
+                                                value={isDisabled ? 0 : val}
+                                                onChange={(v) => !isDisabled && setKedisiplinan(prev => ({ ...prev, [key]: v }))}
+                                                disabled={isDisabled}
+                                            />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* KOGNITIF */}
+                    <Card className="lg:col-span-2">
+                        <CardHeader>
+                            <CardTitle className="flex justify-between">
+                                Kognitif Qur'ani
+                                <span className="text-blue-600">{formatScore(kognitifScore)}</span>
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid md:grid-cols-2 gap-8">
+                            <div className="space-y-4">
+                                <h4 className="font-semibold">Tahfidz (10-100)</h4>
+                                <TahfidzInput
+                                    studentId={selectedStudent?.id}
+                                    reportCardId={existingReport?.id}
+                                    onScoreChange={setTahfidzScore}
+                                    onProgressChange={setTahfidzProgress}
+                                />
+                            </div>
+                            <div className="space-y-6">
+                                <h4 className="font-semibold">Tahsin (10-100)</h4>
+
+                                {/* Bulk Input Tahsin */}
+                                <Card className="bg-blue-50 border-blue-200">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm flex items-center gap-2">
+                                            <Plus className="h-4 w-4" />
+                                            Input Nilai Massal
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="flex flex-col md:flex-row gap-4 items-end">
+                                            <div className="space-y-2 flex-1 w-full">
+                                                <label className="text-xs font-medium">Nilai (10-100)</label>
+                                                <input
+                                                    type="number"
+                                                    min="10"
+                                                    max="100"
+                                                    className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                                                    placeholder="Contoh: 85"
+                                                    id="bulk-tahsin-input"
+                                                />
+                                            </div>
+                                            <Button
+                                                onClick={() => {
+                                                    const input = document.getElementById('bulk-tahsin-input') as HTMLInputElement;
+                                                    const value = parseInt(input.value);
+
+                                                    if (!value) {
+                                                        alert('Mohon isi nilai terlebih dahulu');
+                                                        return;
+                                                    }
+                                                    if (value < 10 || value > 100) {
+                                                        alert('Nilai harus antara 10-100');
+                                                        return;
+                                                    }
+
+                                                    const updated: Record<string, number> = {};
+                                                    Object.keys(tahsin).forEach(key => {
+                                                        updated[key] = value;
+                                                    });
+                                                    setTahsin(updated);
+                                                    input.value = ''; // Clear input
+                                                }}
+                                                className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white"
+                                            >
+                                                Terapkan ke Semua
+                                            </Button>
+                                        </div>
+                                        <p className="text-xs text-gray-600 mt-2">
+                                            * Nilai akan diterapkan ke semua aspek tahsin
+                                        </p>
+                                    </CardContent>
+                                </Card>
+
+                                <div className="space-y-4">
+                                    {Object.entries(tahsin).map(([key, val]) => (
+                                        <ScoreInput
+                                            key={key}
+                                            label={key}
+                                            value={val}
+                                            onChange={(v) => setTahsin(prev => ({ ...prev, [key]: v }))}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="space-y-4 md:col-span-2 border-t pt-4">
+                                <h4 className="font-semibold">Ujian Akhir Semester (10-100)</h4>
+                                <div className="grid md:grid-cols-2 gap-4">
+                                    <ScoreInput label="UAS Tulis" value={uasTulis} onChange={setUasTulis} max={100} />
+                                    <ScoreInput label="UAS Lisan" value={uasLisan} onChange={setUasLisan} max={100} />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* SUMMARY */}
+                    <Card className="lg:col-span-2 bg-blue-50 border-blue-200">
+                        <CardHeader>
+                            <CardTitle>Ringkasan Nilai Akhir</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                                <div>
+                                    <p className="text-sm text-gray-500">Akhlak ({settings?.bobot_akhlak}%)</p>
+                                    <p className="text-xl font-bold">{formatScore(akhlakAvg)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-500">Kedisiplinan ({settings?.bobot_kedisiplinan}%)</p>
+                                    <p className="text-xl font-bold">{formatScore(kedisiplinanAvg)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-500">Kognitif ({settings?.bobot_kognitif}%)</p>
+                                    <p className="text-xl font-bold">{formatScore(kognitifScore)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-500">Total / Predikat</p>
+                                    <p className="text-2xl font-bold text-blue-700">{formatScore(finalScore)} / {predikat}</p>
+                                </div>
+                            </div>
+
+                            <div className="mt-6">
+                                <Label>Catatan Ustadz/Ustadzah</Label>
+                                <textarea
+                                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                    value={catatan}
+                                    onChange={(e) => setCatatan(e.target.value)}
+                                    placeholder="Berikan catatan perkembangan santri..."
+                                />
+                            </div>
+
+                            <div className="mt-6 flex justify-end">
+                                <Button size="lg" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+                                    <Save className="mr-2 h-4 w-4" /> Simpan Raport
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+        </div>
+    );
+}
