@@ -57,3 +57,4 @@ Aplikasi web untuk pengelolaan nilai raport santri berbasis React + Supabase.
 ## Catatan
 - Pastikan RLS Policies sudah diaplikasikan agar data aman.
 - Untuk print raport, gunakan browser Print (Ctrl+P) dan pastikan opsi "Background graphics" dicentang.
+"# raport-rqm" 
