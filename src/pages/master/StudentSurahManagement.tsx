@@ -18,7 +18,6 @@ export default function StudentSurahManagement() {
     const queryClient = useQueryClient();
     const { toast } = useToast();
     const [selectedStudent, setSelectedStudent] = useState<string>('');
-    const [selectedJuz, setSelectedJuz] = useState<number | null>(null);
 
     // Confirmation Dialog State
     const [confirmOpen, setConfirmOpen] = useState(false);
@@ -96,7 +95,7 @@ export default function StudentSurahManagement() {
                 if (error) throw error;
             }
         },
-        onSuccess: (_, variables) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['student_surah_assignment', selectedStudent] });
             // Optional: Show toast only for errors or bulk actions to avoid spamming
         },
@@ -124,13 +123,12 @@ export default function StudentSurahManagement() {
             );
             if (error) throw error;
         },
-        onSuccess: (_, variables) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['student_surah_assignment', selectedStudent] });
-            setSelectedJuz(null);
             toast({
                 variant: "success",
                 title: "Berhasil",
-                description: `Juz ${variables.juz} berhasil ${variables.assign ? 'diaktifkan' : 'dinonaktifkan'} semua.`
+                description: "Juz berhasil diupdate."
             });
         },
         onError: (error) => {

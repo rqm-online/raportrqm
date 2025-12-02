@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Users, FileText, BookOpen } from 'lucide-react';
+import { Users, FileText } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function Dashboard() {
@@ -55,7 +55,7 @@ export default function Dashboard() {
             <div>
                 <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
                 <p className="text-muted-foreground">
-                    Selamat datang kembali, {user?.full_name || user?.email}
+                    Selamat datang kembali, {(user as any)?.full_name || user?.email}
                 </p>
             </div>
 
