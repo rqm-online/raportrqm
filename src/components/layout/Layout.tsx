@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { LayoutDashboard, Users, FileText, Settings, LogOut, BookOpen, Printer } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, LogOut, BookOpen } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 
@@ -16,29 +16,18 @@ export default function Layout() {
         return null;
     }
 
-    const userRole = session.user.user_metadata?.role || 'viewer'; // Fallback if role not in metadata yet
-
-    // Note: We should ideally get role from DB or metadata. 
-    // For now assuming the session object has what we need or we fetch it.
-    // Since we don't have a robust role context yet, let's just show all for now or check if we can get it.
-    // In the previous steps we saw `user.role` being used in Dashboard. 
-    // Let's assume we can check role from the user object if we extended the type, 
-    // but standard supabase user doesn't have 'role' property at top level (it's in app_metadata or user_metadata).
-    // However, for the menu, let's just show "Manajemen User" if the user is likely an admin.
-    // Or simpler: Show it, and let the page handle access control (or hide if we can't determine).
-
     // Let's define the nav items.
     const navItems = [
         { href: '/', label: 'Dashboard', icon: LayoutDashboard },
         { href: '/students', label: 'Data Santri', icon: Users },
         { href: '/teachers', label: 'Data Guru', icon: Users },
         { href: '/halaqah', label: 'Data Halaqah', icon: Users },
+        { href: '/tahsin', label: 'Data Tahsin', icon: BookOpen },
         { href: '/surah', label: 'Data Surah', icon: BookOpen },
         { href: '/student-surah', label: 'Surah per Santri', icon: BookOpen },
         { href: '/academic', label: 'Tahun Ajaran', icon: BookOpen },
         { href: '/raport/input', label: 'Input Raport', icon: FileText },
         { href: '/raport/leger', label: 'Leger Nilai', icon: BookOpen },
-        { href: '/raport/print-list', label: 'Cetak Raport', icon: Printer },
         { href: '/users', label: 'Manajemen User', icon: Users },
         { href: '/settings', label: 'Pengaturan', icon: Settings },
     ];

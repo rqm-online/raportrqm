@@ -6,13 +6,19 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Plus, Pencil, Trash2, Eye, EyeOff } from 'lucide-react';
+import { Plus, Pencil, Trash2, Eye, EyeOff, Check, X, Settings } from 'lucide-react';
+import { useToast } from '../../components/ui/use-toast';
 
 export default function SurahManagement() {
     const queryClient = useQueryClient();
+    const { toast } = useToast();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingSurah, setEditingSurah] = useState<SurahMaster | null>(null);
     const [formData, setFormData] = useState<Partial<SurahMaster>>({});
+
+    // Inline editing state
+    const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
+    const [inlineEditName, setInlineEditName] = useState('');
 
     const { data: surahList, isLoading } = useQuery({
         queryKey: ['surah_master'],
@@ -28,11 +34,11 @@ export default function SurahManagement() {
 
     const saveMutation = useMutation({
         mutationFn: async (data: Partial<SurahMaster>) => {
-            if (editingSurah?.id) {
+            if (data.id) {
                 const { error } = await supabase
                     .from('surah_master')
                     .update(data)
-                    .eq('id', editingSurah.id);
+                    .eq('id', data.id);
                 if (error) throw error;
             } else {
                 const { error } = await supabase.from('surah_master').insert([data]);
@@ -44,9 +50,21 @@ export default function SurahManagement() {
             setIsFormOpen(false);
             setEditingSurah(null);
             setFormData({});
-            alert('Surah berhasil disimpan');
+            setInlineEditingId(null);
+            setInlineEditName('');
+            toast({
+                title: "Berhasil",
+                description: "Data surah berhasil disimpan",
+                variant: "success"
+            });
         },
-        onError: (err: any) => alert('Gagal menyimpan: ' + err.message)
+        onError: (err: any) => {
+            toast({
+                title: "Gagal",
+                description: "Gagal menyimpan: " + err.message,
+                variant: "destructive"
+            });
+        }
     });
 
     const toggleActiveMutation = useMutation({
@@ -69,14 +87,33 @@ export default function SurahManagement() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['surah_master'] });
-            alert('Surah berhasil dihapus');
+            toast({
+                title: "Berhasil",
+                description: "Surah berhasil dihapus",
+                variant: "success"
+            });
         }
     });
 
-    const handleEdit = (surah: SurahMaster) => {
+    const handleFullEdit = (surah: SurahMaster) => {
         setEditingSurah(surah);
         setFormData(surah);
         setIsFormOpen(true);
+    };
+
+    const handleInlineEdit = (surah: SurahMaster) => {
+        setInlineEditingId(surah.id);
+        setInlineEditName(surah.nama_surah);
+    };
+
+    const handleInlineSave = (id: string) => {
+        if (!inlineEditName.trim()) return;
+        saveMutation.mutate({ id, nama_surah: inlineEditName });
+    };
+
+    const handleCancelInline = () => {
+        setInlineEditingId(null);
+        setInlineEditName('');
     };
 
     const handleDelete = (id: string) => {
@@ -109,7 +146,7 @@ export default function SurahManagement() {
             {isFormOpen && (
                 <Card>
                     <CardHeader>
-                        <CardTitle>{editingSurah ? 'Edit Surah' : 'Tambah Surah Baru'}</CardTitle>
+                        <CardTitle>{editingSurah ? 'Edit Detail Surah' : 'Tambah Surah Baru'}</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleSubmit} className="space-y-4">
@@ -177,10 +214,32 @@ export default function SurahManagement() {
                                 <div className="space-y-2">
                                     {surahList.map((surah) => (
                                         <div key={surah.id} className="flex justify-between items-center py-2 border-b last:border-0">
-                                            <div className="flex items-center gap-3">
-                                                <span className={`text-sm ${!surah.is_active ? 'text-gray-400 line-through' : ''}`}>
-                                                    {surah.nama_surah} ({surah.nomor_surah})
-                                                </span>
+                                            <div className="flex items-center gap-3 flex-1">
+                                                {inlineEditingId === surah.id ? (
+                                                    <div className="flex items-center gap-2 flex-1 max-w-md">
+                                                        <Input
+                                                            value={inlineEditName}
+                                                            onChange={(e) => setInlineEditName(e.target.value)}
+                                                            className="h-8"
+                                                            autoFocus
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') handleInlineSave(surah.id);
+                                                                if (e.key === 'Escape') handleCancelInline();
+                                                            }}
+                                                        />
+                                                        <Button size="sm" variant="ghost" className="text-green-600 h-8 w-8 p-0" onClick={() => handleInlineSave(surah.id)}>
+                                                            <Check className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button size="sm" variant="ghost" className="text-red-600 h-8 w-8 p-0" onClick={handleCancelInline}>
+                                                            <X className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                ) : (
+                                                    <span className={`text-sm ${!surah.is_active ? 'text-gray-400 line-through' : ''}`}>
+                                                        {surah.nama_surah} ({surah.nomor_surah})
+                                                    </span>
+                                                )}
+
                                                 {!surah.is_active && (
                                                     <span className="text-xs bg-gray-200 px-2 py-0.5 rounded">Nonaktif</span>
                                                 )}
@@ -194,8 +253,21 @@ export default function SurahManagement() {
                                                 >
                                                     {surah.is_active ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                                                 </Button>
-                                                <Button size="sm" variant="ghost" onClick={() => handleEdit(surah)}>
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => handleInlineEdit(surah)}
+                                                    title="Edit Nama"
+                                                >
                                                     <Pencil className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => handleFullEdit(surah)}
+                                                    title="Edit Detail Lengkap"
+                                                >
+                                                    <Settings className="h-4 w-4" />
                                                 </Button>
                                                 <Button size="sm" variant="ghost" className="text-red-500" onClick={() => handleDelete(surah.id)}>
                                                     <Trash2 className="h-4 w-4" />

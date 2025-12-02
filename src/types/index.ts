@@ -13,8 +13,20 @@ export interface Halaqah {
     nama: string;
     guru_id?: string;
     is_active: boolean;
+    tahsin_items?: string[];
     guru?: User; // Joined data
 }
+
+export interface TahsinMaster {
+    id: string;
+    nama_item: string;
+    urutan: number;
+    is_active: boolean;
+    halaqah_id?: string | null; // NULL = global, specific ID = per-halaqah
+    created_at?: string;
+    updated_at?: string;
+}
+
 
 export interface SettingsLembaga {
     id: string;
@@ -31,6 +43,7 @@ export interface SettingsLembaga {
     skala_penilaian: Record<string, number>;
     footer_raport: string;
     signature_url?: string;
+    tempat_tanggal_raport?: string;
 }
 
 export interface Student {
@@ -58,6 +71,7 @@ export interface Semester {
     academic_year_id: string;
     nama: string;
     is_active: boolean;
+    jumlah_hari_efektif?: number;
     academic_year?: AcademicYear;
 }
 
@@ -67,6 +81,10 @@ export interface ReportCard {
     semester_id: string;
     akhlak: Record<string, number>;
     kedisiplinan: Record<string, number>;
+    sakit?: number;
+    izin?: number;
+    alpa?: number;
+    jumlah_hari_efektif?: number;
     kognitif: {
         Tahfidz?: Record<string, number>;
         Tahsin?: Record<string, number>;

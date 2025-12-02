@@ -4,9 +4,11 @@ import { supabase } from '../../lib/supabase';
 import { Card, CardContent } from '../../components/ui/card';
 import { Label } from '../../components/ui/label';
 import { Button } from '../../components/ui/button';
-import { Download, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Download, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import type { Halaqah, Semester } from '../../types';
 import { formatScore, getPredikat } from '../../utils/grading';
+import { useToast } from '../../components/ui/use-toast';
 
 interface LegerRow {
     student_id: string;
@@ -25,6 +27,7 @@ type SortConfig = {
 } | null;
 
 export default function LegerNilai() {
+    const { toast } = useToast();
     const [selectedHalaqahId, setSelectedHalaqahId] = useState<string>('');
     const [sortConfig, setSortConfig] = useState<SortConfig>(null);
 
@@ -116,7 +119,57 @@ export default function LegerNilai() {
     };
 
     const handleExport = () => {
-        alert("Fitur export Excel akan segera hadir!");
+        if (!sortedData || sortedData.length === 0) {
+            toast({
+                title: "Data Kosong",
+                description: "Tidak ada data untuk diexport",
+                variant: "destructive"
+            });
+            return;
+        }
+
+        // Define headers
+        const headers = [
+            "No",
+            "Nama Santri",
+            "NIS",
+            "Halaqah",
+            "Nilai Akhlak",
+            "Nilai Kedisiplinan",
+            "Nilai Kognitif",
+            "Nilai Akhir",
+            "Predikat"
+        ];
+
+        // Map data to rows
+        const rows = sortedData.map((row, index) => [
+            index + 1,
+            `"${row.student_name}"`, // Quote to handle commas in names
+            `"${row.nis}"`,
+            `"${row.halaqah_name || '-'}"`,
+            formatScore(row.nilai_akhir_akhlak),
+            formatScore(row.nilai_akhir_kedisiplinan),
+            formatScore(row.nilai_akhir_kognitif),
+            formatScore(row.nilai_akhir_total),
+            settings ? getPredikat(row.nilai_akhir_total, settings.skala_penilaian) : '-'
+        ]);
+
+        // Combine headers and rows
+        const csvContent = [
+            headers.join(","),
+            ...rows.map(r => r.join(","))
+        ].join("\n");
+
+        // Create download link
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Leger_Nilai_${semesterData?.academic_year?.tahun_ajaran}_${semesterData?.nama}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     if (!semesterData) return <div>Loading Semester...</div>;
@@ -227,7 +280,16 @@ export default function LegerNilai() {
                                 sortedData.map((row, index) => (
                                     <tr key={row.student_id} className="border-b last:border-0 hover:bg-gray-50">
                                         <td className="px-4 py-3">{index + 1}</td>
-                                        <td className="px-4 py-3 font-medium">{row.student_name}</td>
+                                        <td className="px-4 py-3">
+                                            <Link
+                                                to={`/raport/input?student=${row.student_id}`}
+                                                className="font-medium text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 w-fit"
+                                                title="Buka Input Raport untuk santri ini"
+                                            >
+                                                {row.student_name}
+                                                <ExternalLink className="h-3 w-3" />
+                                            </Link>
+                                        </td>
                                         <td className="px-4 py-3">{row.halaqah_name || '-'}</td>
                                         <td className="px-4 py-3 text-center">{formatScore(row.nilai_akhir_akhlak)}</td>
                                         <td className="px-4 py-3 text-center">{formatScore(row.nilai_akhir_kedisiplinan)}</td>

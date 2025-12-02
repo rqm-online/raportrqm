@@ -9,7 +9,9 @@ import { ScoreInput } from '../../components/raport/ScoreInput';
 import { TahfidzInput } from '../../components/raport/TahfidzInput';
 import { calculateAverage, calculateFinalScore, formatScore, getPredikat } from '../../utils/grading';
 import { Save, Printer, Plus } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
+import { UnsavedChangesDialog } from '../../components/ui/unsaved-changes-dialog';
 
 // Default structure for new report card
 const defaultAkhlak = {
@@ -27,7 +29,7 @@ const defaultKedisiplinan = {
 
 const defaultKognitif = {
     "Tahfidz": { "Juz 30": 10, "Juz 29": 10 }, // Legacy default, not used for new input
-    "Tahsin": { "Makhraj": 10, "Tajwid": 10 },
+    "Tahsin": {},
 };
 
 export default function RaportInput() {
@@ -48,12 +50,45 @@ export default function RaportInput() {
     const [uasLisan, setUasLisan] = useState(10);
     const [catatan, setCatatan] = useState('');
 
+    // Attendance State
+    const [sakit, setSakit] = useState<number | string>(0);
+    const [izin, setIzin] = useState<number | string>(0);
+    const [alpa, setAlpa] = useState<number | string>(0);
+    const [effectiveDays, setEffectiveDays] = useState<number | string>(120); // Default 120 days
+
+    // Track unsaved changes
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [initialFormState, setInitialFormState] = useState<string>('');
+
+    // Get URL parameters
+    const [searchParams] = useSearchParams();
+
+    // Initialize unsaved changes hook
+    const { showWarning, confirmNavigation, cancelNavigation } = useUnsavedChangesWarning(hasUnsavedChanges);
+
     // Fetch Data
     const { data: students } = useQuery({
         queryKey: ['students'],
         queryFn: async () => {
-            const { data } = await supabase.from('students').select('*').eq('is_active', true).order('nama');
+            const { data } = await supabase
+                .from('students')
+                .select('*, halaqah_data:halaqah(*)')
+                .eq('is_active', true)
+                .order('nama');
             return data as Student[];
+        }
+    });
+
+    // Fetch Global Tahsin Items (Fallback)
+    const { data: globalTahsinItems } = useQuery({
+        queryKey: ['tahsin_master_global'],
+        queryFn: async () => {
+            const { data } = await supabase
+                .from('tahsin_master')
+                .select('nama_item')
+                .eq('is_active', true)
+                .order('urutan');
+            return data?.map(i => i.nama_item) || [];
         }
     });
 
@@ -68,6 +103,17 @@ export default function RaportInput() {
     useEffect(() => {
         if (activeSemesterData) setActiveSemester(activeSemesterData);
     }, [activeSemesterData]);
+
+    // Auto-select student from URL parameter
+    useEffect(() => {
+        const studentIdFromUrl = searchParams.get('student');
+        if (studentIdFromUrl && students) {
+            const student = students.find(s => s.id === studentIdFromUrl);
+            if (student && selectedStudentId !== studentIdFromUrl) {
+                setSelectedStudentId(studentIdFromUrl);
+            }
+        }
+    }, [searchParams, students, selectedStudentId]);
 
     const { data: settings } = useQuery({
         queryKey: ['settings'],
@@ -94,24 +140,49 @@ export default function RaportInput() {
 
     // Load existing data
     useEffect(() => {
-        if (selectedStudentId && activeSemester) {
+        if (selectedStudentId && activeSemester && students) {
             const draftKey = `draft_raport_${selectedStudentId}_${activeSemester.id}`;
+            const student = students.find(s => s.id === selectedStudentId);
+
+            // Determine active Tahsin items
+            // Priority: Halaqah Config -> Global Fallback
+            const activeTahsinItems = (student?.halaqah_data?.tahsin_items && student.halaqah_data.tahsin_items.length > 0)
+                ? student.halaqah_data.tahsin_items
+                : (globalTahsinItems || []);
 
             if (existingReport) {
                 // Load from saved report
                 setAkhlak(existingReport.akhlak || defaultAkhlak);
                 setKedisiplinan(existingReport.kedisiplinan || defaultKedisiplinan);
-                const kognitif = existingReport.kognitif || defaultKognitif;
 
-                // Tahfidz score might be in kognitif JSON for legacy, or calculated
-                // We'll rely on TahfidzInput to set the score via callback if it has data
-                // But if it's a legacy report, we might need to handle it. 
-                // For now, let's assume TahfidzInput handles it.
+                // Merge existing scores with active items
+                // If an item is active but has no score, set default 10
+                // If an item has score but is no longer active, keep it (or filter it? User said "only active group appears")
+                // Let's filter to show ONLY active items, but preserve scores if they exist.
 
-                setTahsin(kognitif.Tahsin || defaultKognitif.Tahsin);
+                const savedTahsin = existingReport.kognitif?.Tahsin || {};
+                const newTahsin: Record<string, number> = {};
+
+                activeTahsinItems.forEach(item => {
+                    newTahsin[item] = savedTahsin[item] || 10;
+                });
+
+                setTahsin(newTahsin);
                 setUasTulis(existingReport.uas_tulis || 10);
                 setUasLisan(existingReport.uas_lisan || 10);
                 setCatatan(existingReport.catatan || '');
+
+                // Load attendance
+                setSakit(existingReport.sakit || 0);
+                setIzin(existingReport.izin || 0);
+                setAlpa(existingReport.alpa || 0);
+
+                // Load effective days
+                if (existingReport.jumlah_hari_efektif) {
+                    setEffectiveDays(existingReport.jumlah_hari_efektif);
+                } else if (activeSemester.jumlah_hari_efektif) {
+                    setEffectiveDays(activeSemester.jumlah_hari_efektif);
+                }
 
                 // Clear draft
                 localStorage.removeItem(draftKey);
@@ -123,31 +194,101 @@ export default function RaportInput() {
                         const draft = JSON.parse(savedDraft);
                         setAkhlak(draft.akhlak || defaultAkhlak);
                         setKedisiplinan(draft.kedisiplinan || defaultKedisiplinan);
-                        setTahsin(draft.tahsin || defaultKognitif.Tahsin);
+
+                        // Apply same logic to draft
+                        const draftTahsin = draft.tahsin || {};
+                        const newTahsin: Record<string, number> = {};
+                        activeTahsinItems.forEach(item => {
+                            newTahsin[item] = draftTahsin[item] || 10;
+                        });
+                        setTahsin(newTahsin);
+
                         setUasTulis(draft.uasTulis || 10);
                         setUasLisan(draft.uasLisan || 10);
                         setCatatan(draft.catatan || '');
-                        // Tahfidz draft loading is skipped for now as it's complex
+
+                        setSakit(draft.sakit || 0);
+                        setIzin(draft.izin || 0);
+                        setAlpa(draft.alpa || 0);
+                        setEffectiveDays(draft.effectiveDays || (activeSemester.jumlah_hari_efektif || 120));
                     } catch (e) {
-                        resetForm();
+                        resetForm(activeTahsinItems);
                     }
                 } else {
-                    resetForm();
+                    resetForm(activeTahsinItems);
                 }
             }
         }
-    }, [existingReport, selectedStudentId, activeSemester]);
+    }, [existingReport, selectedStudentId, activeSemester, students, globalTahsinItems]);
 
-    const resetForm = () => {
+    const resetForm = (items: string[] = []) => {
         setAkhlak(defaultAkhlak);
         setKedisiplinan(defaultKedisiplinan);
-        setTahsin(defaultKognitif.Tahsin);
+
+        const initialTahsin: Record<string, number> = {};
+        items.forEach(item => {
+            initialTahsin[item] = 10;
+        });
+        setTahsin(initialTahsin);
+
         setUasTulis(10);
         setUasLisan(10);
         setCatatan('');
         setTahfidzScore(10);
         setTahfidzProgress({});
+        setSakit(0);
+        setIzin(0);
+        setAlpa(0);
+        setEffectiveDays(activeSemester?.jumlah_hari_efektif || 120);
     };
+
+    // Track form changes
+    useEffect(() => {
+        if (selectedStudentId && activeSemester) {
+            const currentState = JSON.stringify({
+                akhlak,
+                kedisiplinan,
+                tahsin,
+                uasTulis,
+                uasLisan,
+                catatan,
+                tahfidzProgress,
+                sakit,
+                izin,
+                alpa,
+                effectiveDays
+            });
+
+            if (initialFormState === '') {
+                // First load, set initial state
+                setInitialFormState(currentState);
+                setHasUnsavedChanges(false);
+            } else {
+                // Check if changed
+                setHasUnsavedChanges(currentState !== initialFormState);
+            }
+        }
+    }, [akhlak, kedisiplinan, tahsin, uasTulis, uasLisan, catatan, tahfidzProgress, sakit, izin, alpa, effectiveDays, initialFormState, selectedStudentId, activeSemester]);
+
+    // Calculate Kehadiran Score automatically
+    useEffect(() => {
+        const effDays = typeof effectiveDays === 'string' ? parseInt(effectiveDays) || 0 : effectiveDays;
+        const s = typeof sakit === 'string' ? parseInt(sakit) || 0 : sakit;
+        const i = typeof izin === 'string' ? parseInt(izin) || 0 : izin;
+        const a = typeof alpa === 'string' ? parseInt(alpa) || 0 : alpa;
+
+        if (effDays > 0) {
+            // Formula: ((Total - (S + I + A)) / Total) * 100
+            const totalAbsence = s + i + a;
+            const realPresence = Math.max(0, effDays - totalAbsence);
+            const score = Math.round((realPresence / effDays) * 100);
+
+            // Update kedisiplinan 'Kehadiran' if it's different
+            if (kedisiplinan["Kehadiran"] !== score) {
+                setKedisiplinan(prev => ({ ...prev, "Kehadiran": score }));
+            }
+        }
+    }, [sakit, izin, alpa, effectiveDays]);
 
     // Auto-save to localStorage
     useEffect(() => {
@@ -160,11 +301,15 @@ export default function RaportInput() {
                 uasTulis,
                 uasLisan,
                 catatan,
+                sakit,
+                izin,
+                alpa,
+                effectiveDays,
                 timestamp: new Date().toISOString()
             };
             localStorage.setItem(draftKey, JSON.stringify(draft));
         }
-    }, [akhlak, kedisiplinan, tahsin, uasTulis, uasLisan, catatan, selectedStudentId, activeSemester]);
+    }, [akhlak, kedisiplinan, tahsin, uasTulis, uasLisan, catatan, sakit, izin, alpa, effectiveDays, selectedStudentId, activeSemester]);
 
     const selectedStudent = students?.find(s => s.id === selectedStudentId);
     const isShiftSiang = selectedStudent?.shift === 'Siang';
@@ -199,7 +344,11 @@ export default function RaportInput() {
                 nilai_akhir_akhlak: akhlakAvg,
                 nilai_akhir_kedisiplinan: kedisiplinanAvg,
                 nilai_akhir_kognitif: kognitifScore,
-                catatan
+                catatan,
+                sakit,
+                izin,
+                alpa,
+                jumlah_hari_efektif: effectiveDays
             };
 
             let reportId = existingReport?.id;
@@ -235,6 +384,24 @@ export default function RaportInput() {
             if (selectedStudentId && activeSemester) {
                 localStorage.removeItem(`draft_raport_${selectedStudentId}_${activeSemester.id}`);
             }
+
+            // Reset unsaved changes tracking
+            setHasUnsavedChanges(false);
+            const newState = JSON.stringify({
+                akhlak,
+                kedisiplinan,
+                tahsin,
+                uasTulis,
+                uasLisan,
+                catatan,
+                tahfidzProgress,
+                sakit,
+                izin,
+                alpa,
+                effectiveDays
+            });
+            setInitialFormState(newState);
+
             alert('Raport berhasil disimpan');
         },
         onError: (error: any) => {
@@ -551,6 +718,60 @@ export default function RaportInput() {
                         </CardContent>
                     </Card>
 
+                    {/* ATTENDANCE INPUT */}
+                    <Card className="lg:col-span-2">
+                        <CardHeader>
+                            <CardTitle>Kehadiran</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Jumlah Hari Efektif</Label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                                        value={effectiveDays}
+                                        onChange={(e) => setEffectiveDays(e.target.value === '' ? '' : parseInt(e.target.value))}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Sakit</Label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                                        value={sakit}
+                                        onChange={(e) => setSakit(e.target.value === '' ? '' : parseInt(e.target.value))}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Izin</Label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                                        value={izin}
+                                        onChange={(e) => setIzin(e.target.value === '' ? '' : parseInt(e.target.value))}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Alpa / Tanpa Keterangan</Label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                                        value={alpa}
+                                        onChange={(e) => setAlpa(e.target.value === '' ? '' : parseInt(e.target.value))}
+                                    />
+                                </div>
+                            </div>
+                            <p className="text-sm text-gray-500">
+                                * Nilai Kedisiplinan "Kehadiran" akan otomatis dihitung berdasarkan data ini.
+                            </p>
+                        </CardContent>
+                    </Card>
+
                     {/* SUMMARY */}
                     <Card className="lg:col-span-2 bg-blue-50 border-blue-200">
                         <CardHeader>
@@ -595,6 +816,13 @@ export default function RaportInput() {
                     </Card>
                 </div>
             )}
+
+            {/* Unsaved Changes Dialog */}
+            <UnsavedChangesDialog
+                open={showWarning}
+                onConfirm={confirmNavigation}
+                onCancel={cancelNavigation}
+            />
         </div>
     );
 }

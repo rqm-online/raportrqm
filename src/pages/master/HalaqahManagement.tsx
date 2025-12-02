@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Card, CardContent } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
 import { Label } from '../../components/ui/label';
@@ -16,8 +16,11 @@ export default function HalaqahManagement() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [formData, setFormData] = useState({
         nama: '',
-        guru_id: ''
+        guru_id: '',
+        tahsin_items: [] as string[]
     });
+
+
 
     // Fetch Halaqah
     const { data: halaqahList, isLoading } = useQuery({
@@ -84,14 +87,15 @@ export default function HalaqahManagement() {
     });
 
     const resetForm = () => {
-        setFormData({ nama: '', guru_id: '' });
+        setFormData({ nama: '', guru_id: '', tahsin_items: [] });
         setEditingId(null);
     };
 
     const handleEdit = (halaqah: Halaqah) => {
         setFormData({
             nama: halaqah.nama,
-            guru_id: halaqah.guru_id || ''
+            guru_id: halaqah.guru_id || '',
+            tahsin_items: halaqah.tahsin_items || []
         });
         setEditingId(halaqah.id);
         setIsOpen(true);
@@ -101,6 +105,8 @@ export default function HalaqahManagement() {
         e.preventDefault();
         mutation.mutate(formData);
     };
+
+
 
     if (isLoading) return <div>Loading...</div>;
 
@@ -115,11 +121,11 @@ export default function HalaqahManagement() {
                     <DialogTrigger asChild>
                         <Button><Plus className="mr-2 h-4 w-4" /> Tambah Halaqah</Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle>{editingId ? 'Edit Halaqah' : 'Tambah Halaqah Baru'}</DialogTitle>
                         </DialogHeader>
-                        <form onSubmit={handleSubmit} className="space-y-4">
+                        <form onSubmit={handleSubmit} className="space-y-6">
                             <div className="space-y-2">
                                 <Label>Nama Halaqah</Label>
                                 <Input
@@ -144,7 +150,10 @@ export default function HalaqahManagement() {
                                     ))}
                                 </select>
                             </div>
-                            <div className="flex justify-end gap-2">
+
+
+
+                            <div className="flex justify-end gap-2 pt-4">
                                 <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Batal</Button>
                                 <Button type="submit" disabled={mutation.isPending}>Simpan</Button>
                             </div>
@@ -160,13 +169,14 @@ export default function HalaqahManagement() {
                             <TableRow>
                                 <TableHead>Nama Halaqah</TableHead>
                                 <TableHead>Guru Pembimbing</TableHead>
+                                <TableHead>Materi Tahsin</TableHead>
                                 <TableHead className="text-right">Aksi</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {halaqahList?.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={3} className="text-center py-8 text-gray-500">
+                                    <TableCell colSpan={4} className="text-center py-8 text-gray-500">
                                         Belum ada data halaqah
                                     </TableCell>
                                 </TableRow>
@@ -179,6 +189,11 @@ export default function HalaqahManagement() {
                                                 <UserIcon className="h-4 w-4 text-gray-400" />
                                                 {h.guru?.full_name || h.guru?.email || <span className="text-gray-400 italic">Belum ada guru</span>}
                                             </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                                                {h.tahsin_items?.length || 0} Materi Aktif
+                                            </span>
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">

@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import type { SurahMaster, TahfidzProgress } from '../../types';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ScoreInput } from './ScoreInput';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Pencil, Check, X } from 'lucide-react';
 import { useToast } from '../ui/use-toast';
+import { Input } from '../ui/input';
 
 interface TahfidzInputProps {
     reportCardId?: string;
@@ -17,8 +18,13 @@ interface TahfidzInputProps {
 
 export function TahfidzInput({ reportCardId, studentId, onScoreChange, onProgressChange }: TahfidzInputProps) {
     const { toast } = useToast();
+    const queryClient = useQueryClient();
     const [selectedJuz, setSelectedJuz] = useState<number | null>(null);
     const [progressData, setProgressData] = useState<Record<string, { kb: number; kh: number }>>({});
+
+    // Editing state
+    const [editingSurahId, setEditingSurahId] = useState<string | null>(null);
+    const [editName, setEditName] = useState('');
 
     // Fetch student's assigned surah (only active ones)
     const { data: allSurah } = useQuery({
@@ -135,6 +141,50 @@ export function TahfidzInput({ reportCardId, studentId, onScoreChange, onProgres
             ...prev,
             [surah.id]: { kb: 10, kh: 10 }
         }));
+    };
+
+    // Mutation to update Surah name
+    const updateSurahMutation = useMutation({
+        mutationFn: async ({ id, name }: { id: string; name: string }) => {
+            const { error } = await supabase
+                .from('surah_master')
+                .update({ nama_surah: name })
+                .eq('id', id);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['student_assigned_surah'] });
+            queryClient.invalidateQueries({ queryKey: ['tahfidz_progress'] });
+            setEditingSurahId(null);
+            setEditName('');
+            toast({
+                title: "Berhasil",
+                description: "Nama surah berhasil diperbarui",
+                variant: "success"
+            });
+        },
+        onError: (error: any) => {
+            toast({
+                title: "Gagal",
+                description: "Gagal memperbarui nama surah: " + error.message,
+                variant: "destructive"
+            });
+        }
+    });
+
+    const startEditing = (surah: SurahMaster) => {
+        setEditingSurahId(surah.id);
+        setEditName(surah.nama_surah);
+    };
+
+    const cancelEditing = () => {
+        setEditingSurahId(null);
+        setEditName('');
+    };
+
+    const saveSurahName = (id: string) => {
+        if (!editName.trim()) return;
+        updateSurahMutation.mutate({ id, name: editName });
     };
 
     const currentJuzSurah = selectedJuz ? (surahByJuz[selectedJuz] || []) : [];
@@ -279,12 +329,46 @@ export function TahfidzInput({ reportCardId, studentId, onScoreChange, onProgres
                         {currentJuzSurah.map(surah => {
                             const isTracked = trackedSurahIds.includes(surah.id);
                             const progress = progressData[surah.id];
+                            const isEditing = editingSurahId === surah.id;
 
                             if (isTracked) {
                                 return (
                                     <div key={surah.id} className="border rounded-md p-3 space-y-2">
                                         <div className="flex justify-between items-center">
-                                            <span className="font-medium text-sm">{surah.nama_surah}</span>
+                                            <div className="flex items-center gap-2 flex-1">
+                                                {isEditing ? (
+                                                    <div className="flex items-center gap-1 flex-1 max-w-[200px]">
+                                                        <Input
+                                                            value={editName}
+                                                            onChange={(e) => setEditName(e.target.value)}
+                                                            className="h-7 text-sm"
+                                                            autoFocus
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') saveSurahName(surah.id);
+                                                                if (e.key === 'Escape') cancelEditing();
+                                                            }}
+                                                        />
+                                                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-600" onClick={() => saveSurahName(surah.id)}>
+                                                            <Check className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-600" onClick={cancelEditing}>
+                                                            <X className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center gap-2 group">
+                                                        <span className="font-medium text-sm">{surah.nama_surah}</span>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-blue-600"
+                                                            onClick={() => startEditing(surah)}
+                                                        >
+                                                            <Pencil className="h-3 w-3" />
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </div>
                                             <Button
                                                 size="sm"
                                                 variant="ghost"
@@ -318,7 +402,40 @@ export function TahfidzInput({ reportCardId, studentId, onScoreChange, onProgres
                             } else {
                                 return (
                                     <div key={surah.id} className="flex justify-between items-center py-1">
-                                        <span className="text-sm text-gray-600">{surah.nama_surah}</span>
+                                        <div className="flex items-center gap-2 flex-1">
+                                            {isEditing ? (
+                                                <div className="flex items-center gap-1 flex-1 max-w-[200px]">
+                                                    <Input
+                                                        value={editName}
+                                                        onChange={(e) => setEditName(e.target.value)}
+                                                        className="h-7 text-sm"
+                                                        autoFocus
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') saveSurahName(surah.id);
+                                                            if (e.key === 'Escape') cancelEditing();
+                                                        }}
+                                                    />
+                                                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-600" onClick={() => saveSurahName(surah.id)}>
+                                                        <Check className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-600" onClick={cancelEditing}>
+                                                        <X className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-2 group">
+                                                    <span className="text-sm text-gray-600">{surah.nama_surah}</span>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-blue-600"
+                                                        onClick={() => startEditing(surah)}
+                                                    >
+                                                        <Pencil className="h-3 w-3" />
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </div>
                                         <Button
                                             size="sm"
                                             variant="outline"

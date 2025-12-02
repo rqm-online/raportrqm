@@ -13,8 +13,10 @@ import StudentSurahManagement from './pages/master/StudentSurahManagement';
 import RaportInput from './pages/raport/RaportInput';
 import LegerNilai from './pages/raport/LegerNilai';
 import RaportPrint from './pages/raport/RaportPrint';
+import RaportPrintBlank from './pages/raport/RaportPrintBlank';
 import Dashboard from './pages/dashboard/Dashboard';
 import UserManagement from './pages/users/UserManagement';
+import TahsinManagement from './pages/tahsin/TahsinManagement';
 import { Toaster } from './components/ui/toaster';
 
 const queryClient = new QueryClient();
@@ -45,6 +47,7 @@ function App() {
         <Router>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/print/blank" element={<RaportPrintBlank />} />
             <Route path="/print/:id" element={<RaportPrint />} />
             <Route element={<Layout />}>
               <Route path="/" element={<Dashboard />} />
@@ -54,9 +57,10 @@ function App() {
               <Route path="/surah" element={<SurahManagement />} />
               <Route path="/halaqah" element={<HalaqahManagement />} />
               <Route path="/teachers" element={<TeacherManagement />} />
+              <Route path="/tahsin" element={<TahsinManagement />} />
               <Route path="/student-surah" element={<StudentSurahManagement />} />
-              <Route path="/raport" element={<RaportInput />} />
-              <Route path="/leger" element={<LegerNilai />} />
+              <Route path="/raport/input" element={<RaportInput />} />
+              <Route path="/raport/leger" element={<LegerNilai />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
           </Routes>

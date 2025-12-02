@@ -165,6 +165,18 @@ export function PrintSettings({ settings, teacher, onSettingsChange, onThemeChan
                                 </Button>
                             </div>
                         </div>
+                        <div className="pt-2 border-t">
+                            <Button
+                                className="w-full"
+                                variant="default"
+                                onClick={() => window.print()}
+                            >
+                                <FileText className="mr-2 h-4 w-4" /> Cetak / Simpan PDF
+                            </Button>
+                            <p className="text-xs text-gray-500 mt-2 text-center">
+                                Gunakan "Save as PDF" di dialog cetak
+                            </p>
+                        </div>
                     </CardContent>
                 </Card>
 

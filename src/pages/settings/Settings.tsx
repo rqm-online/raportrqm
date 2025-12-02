@@ -127,6 +127,14 @@ export default function Settings() {
                                     placeholder="https://..."
                                 />
                             </div>
+                            <div className="space-y-2">
+                                <Label>Tempat & Tanggal Raport (Default)</Label>
+                                <Input
+                                    value={formData.tempat_tanggal_raport || ''}
+                                    onChange={e => setFormData({ ...formData, tempat_tanggal_raport: e.target.value })}
+                                    placeholder="Contoh: Bandung, 20 Desember 2024"
+                                />
+                            </div>
                         </CardContent>
                     </Card>
 
