@@ -6,12 +6,15 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Upload, Download } from 'lucide-react';
+import { useToast } from '../../components/ui/use-toast';
 
 export default function Students() {
     const queryClient = useQueryClient();
+    const { toast } = useToast();
     const [isEditing, setIsEditing] = useState<Student | null>(null);
     const [isFormOpen, setIsFormOpen] = useState(false);
+    const [isImportOpen, setIsImportOpen] = useState(false);
     const [formData, setFormData] = useState<Partial<Student>>({});
 
     const { data: students, isLoading } = useQuery({
@@ -78,6 +81,29 @@ export default function Students() {
         },
     });
 
+    // Bulk import mutation
+    const importMutation = useMutation({
+        mutationFn: async (students: Partial<Student>[]) => {
+            const { error } = await supabase.from('students').insert(students);
+            if (error) throw error;
+        },
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['students'] });
+            setIsImportOpen(false);
+            toast({
+                title: "Import Berhasil",
+                description: `${variables.length} santri berhasil ditambahkan.`,
+            });
+        },
+        onError: (error: any) => {
+            toast({
+                variant: "destructive",
+                title: "Import Gagal",
+                description: error.message,
+            });
+        },
+    });
+
     const handleEdit = (student: Student) => {
         setIsEditing(student);
         setFormData({
@@ -98,13 +124,98 @@ export default function Students() {
         saveMutation.mutate({ ...formData, is_active: true });
     };
 
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const text = event.target?.result as string;
+                const lines = text.split('\n').filter(line => line.trim());
+
+                if (lines.length < 2) {
+                    toast({
+                        variant: "destructive",
+                        title: "File Kosong",
+                        description: "File CSV tidak memiliki data.",
+                    });
+                    return;
+                }
+
+                // Parse CSV
+                const students: Partial<Student>[] = [];
+                for (let i = 1; i < lines.length; i++) {
+                    const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+
+                    if (values.length >= 2 && values[0]) {
+                        const halaqahName = values[2];
+                        let halaqahId = null;
+
+                        if (halaqahName && halaqahList) {
+                            const halaqah = halaqahList.find(h =>
+                                h.nama.toLowerCase() === halaqahName.toLowerCase()
+                            );
+                            halaqahId = halaqah?.id || null;
+                        }
+
+                        students.push({
+                            nama: values[0],
+                            nis: values[1] || undefined,
+                            halaqah_id: halaqahId || undefined,
+                            nama_orang_tua: values[3] || undefined,
+                            shift: (values[4] === 'Siang' ? 'Siang' : 'Sore') as 'Siang' | 'Sore',
+                            is_active: true,
+                        });
+                    }
+                }
+
+                if (students.length === 0) {
+                    toast({
+                        variant: "destructive",
+                        title: "Tidak Ada Data Valid",
+                        description: "Tidak ada data santri yang valid di file CSV.",
+                    });
+                    return;
+                }
+
+                importMutation.mutate(students);
+            } catch (error: any) {
+                toast({
+                    variant: "destructive",
+                    title: "Error Parsing File",
+                    description: error.message,
+                });
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    const downloadTemplate = () => {
+        const csv = `Nama,NIS,Halaqah,Nama Orang Tua,Shift
+Ahmad Fauzi,2024001,Al-Fatihah,Bapak Ahmad,Sore
+Fatimah Zahra,2024002,Al-Baqarah,Ibu Fatimah,Siang`;
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'template_import_santri.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h1 className="text-2xl font-bold">Data Santri</h1>
-                <Button onClick={() => { setIsEditing(null); setFormData({}); setIsFormOpen(true); }}>
-                    <Plus className="mr-2 h-4 w-4" /> Tambah Santri
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setIsImportOpen(true)}>
+                        <Upload className="mr-2 h-4 w-4" /> Import Massal
+                    </Button>
+                    <Button onClick={() => { setIsEditing(null); setFormData({}); setIsFormOpen(true); }}>
+                        <Plus className="mr-2 h-4 w-4" /> Tambah Santri
+                    </Button>
+                </div>
             </div>
 
             {isFormOpen && (
@@ -167,6 +278,58 @@ export default function Students() {
                                 <Button type="submit" disabled={saveMutation.isPending}>Simpan</Button>
                             </div>
                         </form>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Import Dialog */}
+            {isImportOpen && (
+                <Card className="mb-6">
+                    <CardHeader>
+                        <CardTitle>Import Santri Massal</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <h3 className="font-semibold text-blue-900 mb-2">Format File CSV:</h3>
+                            <p className="text-sm text-blue-800 mb-3">
+                                File harus berformat CSV dengan kolom: <strong>Nama, NIS, Halaqah, Nama Orang Tua, Shift</strong>
+                            </p>
+                            <Button size="sm" variant="outline" onClick={downloadTemplate}>
+                                <Download className="mr-2 h-4 w-4" /> Download Template
+                            </Button>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Upload File CSV</Label>
+                            <Input
+                                type="file"
+                                accept=".csv"
+                                onChange={handleFileUpload}
+                                disabled={importMutation.isPending}
+                            />
+                        </div>
+
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                            <p className="text-xs text-yellow-800">
+                                <strong>Catatan:</strong>
+                            </p>
+                            <ul className="text-xs text-yellow-700 list-disc list-inside mt-1 space-y-1">
+                                <li>Nama Halaqah harus sesuai dengan data yang sudah ada</li>
+                                <li>Shift: "Siang" atau "Sore" (default: Sore)</li>
+                                <li>Jika Halaqah tidak ditemukan, santri akan ditambahkan tanpa Halaqah</li>
+                            </ul>
+                        </div>
+
+                        <div className="flex justify-end gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setIsImportOpen(false)}
+                                disabled={importMutation.isPending}
+                            >
+                                Batal
+                            </Button>
+                        </div>
                     </CardContent>
                 </Card>
             )}
