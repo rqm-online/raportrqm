@@ -9,9 +9,12 @@ import Academic from './pages/master/Academic';
 import SurahManagement from './pages/master/SurahManagement';
 import HalaqahManagement from './pages/master/HalaqahManagement';
 import TeacherManagement from './pages/master/TeacherManagement';
+import TeacherAssignments from './pages/master/TeacherAssignments';
 import StudentSurahManagement from './pages/master/StudentSurahManagement';
 import RaportInput from './pages/raport/RaportInput';
+import GuruInput from './pages/raport/GuruInput';
 import LegerNilai from './pages/raport/LegerNilai';
+import Peringkat from './pages/raport/Peringkat';
 import RaportPrint from './pages/raport/RaportPrint';
 import RaportPrintBlank from './pages/raport/RaportPrintBlank';
 import Dashboard from './pages/dashboard/Dashboard';
@@ -57,10 +60,13 @@ function App() {
               <Route path="/surah" element={<SurahManagement />} />
               <Route path="/halaqah" element={<HalaqahManagement />} />
               <Route path="/teachers" element={<TeacherManagement />} />
+              <Route path="/teacher-assignments" element={<TeacherAssignments />} />
               <Route path="/tahsin" element={<TahsinManagement />} />
               <Route path="/student-surah" element={<StudentSurahManagement />} />
               <Route path="/raport/input" element={<RaportInput />} />
+              <Route path="/guru/input" element={<GuruInput />} />
               <Route path="/raport/leger" element={<LegerNilai />} />
+              <Route path="/raport/peringkat" element={<Peringkat />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
           </Routes>

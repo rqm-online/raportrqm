@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Users, FileText } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import GuruDashboard from './GuruDashboard';
 
 export default function Dashboard() {
     const { session } = useAuth();
@@ -48,7 +49,26 @@ export default function Dashboard() {
         }
     });
 
+    // Fetch user role
+    const { data: userRole } = useQuery({
+        queryKey: ['user_role', session?.user?.id],
+        enabled: !!session?.user?.id,
+        queryFn: async () => {
+            const { data } = await supabase
+                .from('users')
+                .select('role')
+                .eq('id', session!.user!.id)
+                .single();
+            return data?.role as 'admin' | 'guru' | 'viewer';
+        }
+    });
+
     if (isLoading) return <div className="p-8">Loading...</div>;
+
+    // Show GuruDashboard for guru role
+    if (userRole === 'guru') {
+        return <GuruDashboard />;
+    }
 
     return (
         <div className="space-y-6">

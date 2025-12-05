@@ -372,10 +372,12 @@ export default function RaportPrint() {
                                     <td className="p-1 border-r border-gray-300">Ujian Akhir Semester (UAS) Tulis</td>
                                     <td className="p-1 text-center font-bold">{report.uas_tulis}</td>
                                 </tr>
-                                <tr>
-                                    <td className="p-1 border-r border-gray-300">Ujian Akhir Semester (UAS) Lisan</td>
-                                    <td className="p-1 text-center font-bold">{report.uas_lisan}</td>
-                                </tr>
+                                {settings.show_uas_lisan !== false && (
+                                    <tr>
+                                        <td className="p-1 border-r border-gray-300">Ujian Akhir Semester (UAS) Lisan</td>
+                                        <td className="p-1 text-center font-bold">{report.uas_lisan}</td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
                     </div>

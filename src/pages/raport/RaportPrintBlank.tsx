@@ -189,10 +189,12 @@ export default function RaportPrintBlank() {
                                     <td className="p-2 border-r border-gray-300">Ujian Tulis</td>
                                     <td className="p-2 text-center font-bold"></td>
                                 </tr>
-                                <tr className="h-8">
-                                    <td className="p-2 border-r border-gray-300">Ujian Lisan</td>
-                                    <td className="p-2 text-center font-bold"></td>
-                                </tr>
+                                {settings.show_uas_lisan !== false && (
+                                    <tr className="h-8">
+                                        <td className="p-2 border-r border-gray-300">Ujian Lisan</td>
+                                        <td className="p-2 text-center font-bold"></td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
                     </div>

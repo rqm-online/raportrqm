@@ -172,6 +172,29 @@ export default function Settings() {
                             <p className="text-sm text-gray-500">Total harus 100%</p>
                         </CardContent>
                     </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Pengaturan Raport</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="flex items-center space-x-2">
+                                <input
+                                    type="checkbox"
+                                    id="show_uas_lisan"
+                                    checked={formData.show_uas_lisan !== false}
+                                    onChange={e => setFormData({ ...formData, show_uas_lisan: e.target.checked })}
+                                    className="h-4 w-4 rounded border-gray-300"
+                                />
+                                <Label htmlFor="show_uas_lisan" className="cursor-pointer">
+                                    Tampilkan UAS Lisan di Raport
+                                </Label>
+                            </div>
+                            <p className="text-sm text-gray-500">
+                                Jika dinonaktifkan, field UAS Lisan tidak akan muncul di input dan tidak akan tercetak di raport.
+                            </p>
+                        </CardContent>
+                    </Card>
                 </div>
 
                 <div className="mt-6 flex justify-end">

@@ -6,7 +6,8 @@ import { Label } from '../../components/ui/label';
 import { Button } from '../../components/ui/button';
 import { Download, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import type { Halaqah, Semester } from '../../types';
+import { useAuth } from '../../hooks/useAuth';
+import type { Halaqah, Semester, TeacherAssignment } from '../../types';
 import { formatScore, getPredikat } from '../../utils/grading';
 import { useToast } from '../../components/ui/use-toast';
 
@@ -28,8 +29,27 @@ type SortConfig = {
 
 export default function LegerNilai() {
     const { toast } = useToast();
+    const { session } = useAuth();
     const [selectedHalaqahId, setSelectedHalaqahId] = useState<string>('');
     const [sortConfig, setSortConfig] = useState<SortConfig>(null);
+
+    // Fetch teacher assignments (for guru role)
+    const { data: teacherAssignments } = useQuery({
+        queryKey: ['teacher_assignments', session?.user?.id],
+        enabled: !!session?.user?.id,
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('teacher_assignments')
+                .select('*')
+                .eq('teacher_id', session!.user!.id)
+                .eq('is_active', true);
+            if (error) throw error;
+            return data as TeacherAssignment[];
+        }
+    });
+
+    // Get assigned halaqah IDs for filtering
+    const assignedHalaqahIds = teacherAssignments?.map(a => a.halaqah_id) || [];
 
     // Fetch Active Semester
     const { data: semesterData } = useQuery({
@@ -40,11 +60,21 @@ export default function LegerNilai() {
         }
     });
 
-    // Fetch Halaqah List
+    // Fetch Halaqah List (filtered by assignments for guru)
     const { data: halaqahList } = useQuery({
-        queryKey: ['halaqah'],
+        queryKey: ['halaqah', assignedHalaqahIds],
         queryFn: async () => {
-            const { data } = await supabase.from('halaqah').select('*').eq('is_active', true).order('nama');
+            let query = supabase
+                .from('halaqah')
+                .select('*')
+                .eq('is_active', true);
+
+            // Filter by assigned halaqahs if user is guru
+            if (teacherAssignments && teacherAssignments.length > 0 && assignedHalaqahIds.length > 0) {
+                query = query.in('id', assignedHalaqahIds);
+            }
+
+            const { data } = await query.order('nama');
             return data as Halaqah[];
         }
     });

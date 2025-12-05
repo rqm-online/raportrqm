@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
-import type { Student, SettingsLembaga, ReportCard, Semester } from '../../types';
+import type { Student, SettingsLembaga, ReportCard, Semester, TeacherAssignment } from '../../types';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Label } from '../../components/ui/label';
@@ -12,6 +12,7 @@ import { Save, Printer, Plus } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import { UnsavedChangesDialog } from '../../components/ui/unsaved-changes-dialog';
+import { useAuth } from '../../hooks/useAuth';
 
 // Default structure for new report card
 const defaultAkhlak = {
@@ -34,8 +35,11 @@ const defaultKognitif = {
 
 export default function RaportInput() {
     const queryClient = useQueryClient();
+    const { session } = useAuth();
     const [selectedStudentId, setSelectedStudentId] = useState<string>('');
     const [activeSemester, setActiveSemester] = useState<Semester | null>(null);
+    const [selectedHalaqahFilter, setSelectedHalaqahFilter] = useState<string>('');
+    const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<'Tahfidz' | 'Tahsin' | ''>('');
 
     // Form State
     const [akhlak, setAkhlak] = useState<Record<string, number>>(defaultAkhlak);
@@ -99,6 +103,28 @@ export default function RaportInput() {
             return data as Semester & { academic_year: any };
         }
     });
+
+    // Fetch teacher assignments for current user (if guru role)
+    const { data: teacherAssignments } = useQuery({
+        queryKey: ['teacher_assignments', session?.user?.id],
+        enabled: !!session?.user?.id,
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('teacher_assignments')
+                .select(`
+                    *,
+                    halaqah:halaqah!halaqah_id(id, nama)
+                `)
+                .eq('teacher_id', session!.user!.id)
+                .eq('is_active', true);
+            if (error) throw error;
+            return data as (TeacherAssignment & { halaqah: { id: string; nama: string } })[];
+        }
+    });
+
+    // Get unique halaqahs and subjects from assignments
+    const assignedHalaqahs = teacherAssignments?.map(a => a.halaqah).filter((v, i, a) => a.findIndex(t => t.id === v.id) === i) || [];
+    const assignedSubjects = teacherAssignments?.map(a => a.subject).filter((v, i, a) => a.indexOf(v) === i) || [];
 
     useEffect(() => {
         if (activeSemesterData) setActiveSemester(activeSemesterData);
@@ -441,18 +467,65 @@ export default function RaportInput() {
             </div>
 
             <Card>
-                <CardContent className="pt-6">
-                    <Label>Pilih Santri</Label>
-                    <select
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        value={selectedStudentId}
-                        onChange={(e) => setSelectedStudentId(e.target.value)}
-                    >
-                        <option value="">-- Pilih Santri --</option>
-                        {students?.map(s => (
-                            <option key={s.id} value={s.id}>{s.nama} ({s.nis}) - Shift {s.shift || 'Sore'}</option>
-                        ))}
-                    </select>
+                <CardContent className="pt-6 space-y-4">
+                    {/* Teacher Filters (only show if user has assignments) */}
+                    {teacherAssignments && teacherAssignments.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b">
+                            <div className="space-y-2">
+                                <Label>Filter Halaqah</Label>
+                                <select
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                    value={selectedHalaqahFilter}
+                                    onChange={(e) => setSelectedHalaqahFilter(e.target.value)}
+                                >
+                                    <option value="">-- Semua Halaqah --</option>
+                                    {assignedHalaqahs.map((h) => (
+                                        <option key={h.id} value={h.id}>
+                                            {h.nama}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Filter Materi</Label>
+                                <select
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                    value={selectedSubjectFilter}
+                                    onChange={(e) => setSelectedSubjectFilter(e.target.value as 'Tahfidz' | 'Tahsin' | '')}
+                                >
+                                    <option value="">-- Semua Materi --</option>
+                                    {assignedSubjects.map((subject) => (
+                                        <option key={subject} value={subject}>
+                                            {subject}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="space-y-2">
+                        <Label>Pilih Santri</Label>
+                        <select
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            value={selectedStudentId}
+                            onChange={(e) => setSelectedStudentId(e.target.value)}
+                        >
+                            <option value="">-- Pilih Santri --</option>
+                            {students
+                                ?.filter(s => {
+                                    // If teacher has assignments, filter by selected halaqah
+                                    if (teacherAssignments && teacherAssignments.length > 0 && selectedHalaqahFilter) {
+                                        return s.halaqah_id === selectedHalaqahFilter;
+                                    }
+                                    return true;
+                                })
+                                .map(s => (
+                                    <option key={s.id} value={s.id}>{s.nama} ({s.nis}) - Shift {s.shift || 'Sore'}</option>
+                                ))
+                            }
+                        </select>
+                    </div>
                     {selectedStudent && isShiftSiang && (
                         <p className="text-sm text-blue-600 mt-2">
                             ℹ️ Santri shift Siang - Nilai Shalat Berjamaah tidak diinput
@@ -712,7 +785,9 @@ export default function RaportInput() {
                                 <h4 className="font-semibold">Ujian Akhir Semester (10-100)</h4>
                                 <div className="grid md:grid-cols-2 gap-4">
                                     <ScoreInput label="UAS Tulis" value={uasTulis} onChange={setUasTulis} max={100} />
-                                    <ScoreInput label="UAS Lisan" value={uasLisan} onChange={setUasLisan} max={100} />
+                                    {settings?.show_uas_lisan !== false && (
+                                        <ScoreInput label="UAS Lisan" value={uasLisan} onChange={setUasLisan} max={100} />
+                                    )}
                                 </div>
                             </div>
                         </CardContent>

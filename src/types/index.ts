@@ -44,6 +44,7 @@ export interface SettingsLembaga {
     footer_raport: string;
     signature_url?: string;
     tempat_tanggal_raport?: string;
+    show_uas_lisan?: boolean;
 }
 
 export interface Student {
@@ -114,4 +115,16 @@ export interface TahfidzProgress {
     kb: number;
     kh: number;
     surah?: SurahMaster;
+}
+
+export interface TeacherAssignment {
+    id: string;
+    teacher_id: string;
+    halaqah_id: string;
+    subject: 'Tahfidz' | 'Tahsin';
+    is_active: boolean;
+    created_at: string;
+    // Joined data
+    teacher?: User;
+    halaqah?: Halaqah;
 }

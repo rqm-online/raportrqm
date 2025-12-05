@@ -1,5 +1,7 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '../../lib/supabase';
 import { LayoutDashboard, Users, FileText, Settings, LogOut, BookOpen } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
@@ -9,6 +11,20 @@ export default function Layout() {
     const location = useLocation();
     const navigate = useNavigate();
 
+    // Fetch user role
+    const { data: userRole } = useQuery({
+        queryKey: ['user_role', session?.user?.id],
+        enabled: !!session?.user?.id,
+        queryFn: async () => {
+            const { data } = await supabase
+                .from('users')
+                .select('role')
+                .eq('id', session!.user!.id)
+                .single();
+            return data?.role as 'admin' | 'guru' | 'viewer';
+        }
+    });
+
     if (loading) return <div className="flex h-screen items-center justify-center">Loading...</div>;
 
     if (!session) {
@@ -16,21 +32,38 @@ export default function Layout() {
         return null;
     }
 
-    // Let's define the nav items.
-    const navItems = [
-        { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-        { href: '/students', label: 'Data Santri', icon: Users },
-        { href: '/teachers', label: 'Data Guru', icon: Users },
-        { href: '/halaqah', label: 'Data Halaqah', icon: Users },
-        { href: '/tahsin', label: 'Data Tahsin', icon: BookOpen },
-        { href: '/surah', label: 'Data Surah', icon: BookOpen },
-        { href: '/student-surah', label: 'Surah per Santri', icon: BookOpen },
-        { href: '/academic', label: 'Tahun Ajaran', icon: BookOpen },
-        { href: '/raport/input', label: 'Input Raport', icon: FileText },
-        { href: '/raport/leger', label: 'Leger Nilai', icon: BookOpen },
-        { href: '/users', label: 'Manajemen User', icon: Users },
-        { href: '/settings', label: 'Pengaturan', icon: Settings },
-    ];
+    // Define nav items based on role
+    const getNavItems = () => {
+        if (userRole === 'guru') {
+            return [
+                { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+                { href: '/student-surah', label: 'Surah per Santri', icon: BookOpen },
+                { href: '/guru/input', label: 'Input Nilai', icon: FileText },
+                { href: '/raport/leger', label: 'Leger Nilai', icon: BookOpen },
+                { href: '/raport/peringkat', label: 'Peringkat', icon: BookOpen },
+            ];
+        }
+
+        // Admin and viewer get full menu
+        return [
+            { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+            { href: '/students', label: 'Data Santri', icon: Users },
+            { href: '/teachers', label: 'Data Guru', icon: Users },
+            { href: '/teacher-assignments', label: 'Penugasan Guru', icon: Users },
+            { href: '/halaqah', label: 'Data Halaqah', icon: Users },
+            { href: '/tahsin', label: 'Data Tahsin', icon: BookOpen },
+            { href: '/surah', label: 'Data Surah', icon: BookOpen },
+            { href: '/student-surah', label: 'Surah per Santri', icon: BookOpen },
+            { href: '/academic', label: 'Tahun Ajaran', icon: BookOpen },
+            { href: '/raport/input', label: 'Input Raport', icon: FileText },
+            { href: '/raport/leger', label: 'Leger Nilai', icon: BookOpen },
+            { href: '/raport/peringkat', label: 'Peringkat', icon: BookOpen },
+            { href: '/users', label: 'Manajemen User', icon: Users },
+            { href: '/settings', label: 'Pengaturan', icon: Settings },
+        ];
+    };
+
+    const navItems = getNavItems();
 
     return (
         <div className="flex h-screen bg-gray-100">
@@ -70,7 +103,7 @@ export default function Layout() {
                         </div>
                         <div className="overflow-hidden">
                             <p className="text-sm font-medium truncate">{session.user.email}</p>
-                            <p className="text-xs text-gray-500">User</p>
+                            <p className="text-xs text-gray-500 capitalize">{userRole || 'User'}</p>
                         </div>
                     </div>
                     <Button variant="outline" className="w-full justify-start gap-2" onClick={() => signOut()}>
