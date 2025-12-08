@@ -11,11 +11,13 @@ import { calculateAverage, formatScore } from '../../utils/grading';
 import { Save } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../components/ui/use-toast';
+import { useSearchParams } from 'react-router-dom';
 
 export default function GuruInput() {
     const queryClient = useQueryClient();
     const { session } = useAuth();
     const { toast } = useToast();
+    const [searchParams] = useSearchParams();
 
     const [selectedHalaqahId, setSelectedHalaqahId] = useState<string>('');
     const [selectedSubject, setSelectedSubject] = useState<'Tahfidz' | 'Tahsin' | ''>('');
@@ -129,12 +131,84 @@ export default function GuruInput() {
 
     const selectedStudent = students?.find(s => s.id === selectedStudentId);
 
+    // Get current assignment details for selected halaqah
+    const currentAssignment = teacherAssignments?.find(a => a.halaqah_id === selectedHalaqahId);
+    const isPembimbing = currentAssignment?.role === 'pembimbing';
+
+    // Auto-select from URL
+    useEffect(() => {
+        const studentIdFromUrl = searchParams.get('student');
+        if (studentIdFromUrl && students && teacherAssignments) {
+            const student = students.find(s => s.id === studentIdFromUrl);
+            if (student) {
+                // Find which halaqah this student belongs to that the teacher is assigned to
+                // We need to match student.halaqah_id with one of the assigned halaqahs
+                // But `students` query is filtered by `selectedHalaqahId`.
+                // Actually, the `students` query depends on `selectedHalaqahId`.
+                // So we can't find the student in `students` list if we haven't selected the halaqah yet.
+
+                // Strategy: Find the halaqah ID first from the student data (which we need to fetch or deduce)
+                // However, we only have `students` when a halaqah is selected.
+                // We need to iterate through assigned halaqahs to find where this student might be?
+                // Or easier: If we have the ID, we assume the user clicked from Leger, so we know the context?
+                // No, Leger just gives ID.
+
+                // Alternative: We temporarily select the first halaqah that matches?
+                // Or better: Use a separate query or logic to set halaqah.
+            }
+        }
+    }, [searchParams, students, teacherAssignments]);
+
+    // Better approach: When mounting, if URL param exists, find the halaqah for that student.
+    // Since we don't have all students loaded, maybe we need to fetch the student's details first if ID is present?
+    const { data: targetStudent } = useQuery({
+        queryKey: ['student_target', searchParams.get('student')],
+        enabled: !!searchParams.get('student'),
+        queryFn: async () => {
+            const id = searchParams.get('student');
+            const { data } = await supabase.from('students').select('halaqah_id').eq('id', id!).single();
+            return data;
+        }
+    });
+
+    useEffect(() => {
+        if (targetStudent && targetStudent.halaqah_id && assignedHalaqahs.length > 0) {
+            // Check if teacher is assigned to this halaqah
+            const assignment = assignedHalaqahs.find(h => h.id === targetStudent.halaqah_id);
+            if (assignment) {
+                if (selectedHalaqahId !== targetStudent.halaqah_id) {
+                    setSelectedHalaqahId(targetStudent.halaqah_id);
+                }
+                const studentId = searchParams.get('student');
+                if (studentId && selectedStudentId !== studentId) {
+                    setSelectedStudentId(studentId);
+                    // Default subject if not set
+                    if (!selectedSubject) setSelectedSubject('Tahsin');
+                }
+            }
+        }
+    }, [targetStudent, assignedHalaqahs, selectedHalaqahId, selectedStudentId, selectedSubject, searchParams]);
+
     // Load existing data
     useEffect(() => {
         if (selectedStudentId && activeSemester && selectedStudent) {
-            const activeTahsinItems = (selectedStudent?.halaqah_data?.tahsin_items && selectedStudent.halaqah_data.tahsin_items.length > 0)
-                ? selectedStudent.halaqah_data.tahsin_items
-                : (globalTahsinItems || []);
+            // STRICT FILTERING: Only show items that are BOTH in the student's config AND in the active Master Data
+            const halaqahItems = selectedStudent?.halaqah_data?.tahsin_items || [];
+
+            let activeTahsinItems: string[] = [];
+
+            if (halaqahItems.length > 0) {
+                // Only include items that exist in global master (to avoid ghosts)
+                if (globalTahsinItems && globalTahsinItems.length > 0) {
+                    activeTahsinItems = halaqahItems.filter(item => globalTahsinItems.includes(item));
+                } else {
+                    // If global items are not loaded or empty, we should NOT fall back to halaqahItems alone
+                    // as it might contain deleted/ghost items.
+                    activeTahsinItems = [];
+                }
+            } else {
+                activeTahsinItems = globalTahsinItems || [];
+            }
 
             if (existingReport) {
                 // Load Tahsin scores
@@ -146,6 +220,12 @@ export default function GuruInput() {
                 setTahsin(newTahsin);
                 setUasTulis(existingReport.uas_tulis || 10);
                 setUasLisan(existingReport.uas_lisan || 10);
+
+                // Load Akhlak & Kedisiplinan if Pembimbing
+                if (isPembimbing) {
+                    setAkhlak(existingReport.akhlak || defaultAkhlak);
+                    setKedisiplinan(existingReport.kedisiplinan || defaultKedisiplinan);
+                }
             } else {
                 // Reset to defaults
                 const initialTahsin: Record<string, number> = {};
@@ -155,11 +235,36 @@ export default function GuruInput() {
                 setTahsin(initialTahsin);
                 setUasTulis(10);
                 setUasLisan(10);
+
+                if (isPembimbing) {
+                    setAkhlak(defaultAkhlak);
+                    setKedisiplinan(defaultKedisiplinan);
+                }
             }
             setTahfidzScore(10);
             setTahfidzProgress({});
         }
-    }, [existingReport, selectedStudentId, activeSemester, selectedStudent, globalTahsinItems]);
+    }, [existingReport, selectedStudentId, activeSemester, selectedStudent, globalTahsinItems, isPembimbing]);
+
+    // Akhlak & Kedisiplinan State (only for Pembimbing)
+    const defaultAkhlak: Record<string, number> = {
+        'Adab Kepada Allah & Rasul': 10,
+        'Adab Kepada Guru': 10,
+        'Adab Kepada Orang Tua': 10,
+        'Adab Kepada Teman': 10,
+        'Adab Terhadap Lingkungan': 10
+    };
+
+    const defaultKedisiplinan: Record<string, number> = {
+        'Kehadiran': 10,
+        'Shalat Berjamaah': 10,
+        'Tilawah Mandiri': 10,
+        'Kebersihan': 10,
+        'Kerapian': 10
+    };
+
+    const [akhlak, setAkhlak] = useState<Record<string, number>>(defaultAkhlak);
+    const [kedisiplinan, setKedisiplinan] = useState<Record<string, number>>(defaultKedisiplinan);
 
     // Save mutation
     const saveMutation = useMutation({
@@ -196,12 +301,24 @@ export default function GuruInput() {
                 // Keep kognitif as is, just update tahfidz_progress
             }
 
-            // Preserve other fields
+            // If Pembimbing, save Akhlak & Kedisiplinan
+            if (isPembimbing) {
+                payload.akhlak = akhlak;
+                payload.kedisiplinan = kedisiplinan;
+                payload.nilai_akhir_akhlak = calculateAverage(akhlak);
+                payload.nilai_akhir_kedisiplinan = calculateAverage(kedisiplinan);
+            } else {
+                // Preserve existing if not pembimbing
+                if (currentReport) {
+                    payload.akhlak = currentReport.akhlak;
+                    payload.kedisiplinan = currentReport.kedisiplinan;
+                    payload.nilai_akhir_akhlak = currentReport.nilai_akhir_akhlak;
+                    payload.nilai_akhir_kedisiplinan = currentReport.nilai_akhir_kedisiplinan;
+                }
+            }
+
+            // Preserve totals if not updated here (usually DB triggers handle this, but explicit is safe)
             if (currentReport) {
-                payload.akhlak = currentReport.akhlak;
-                payload.kedisiplinan = currentReport.kedisiplinan;
-                payload.nilai_akhir_akhlak = currentReport.nilai_akhir_akhlak;
-                payload.nilai_akhir_kedisiplinan = currentReport.nilai_akhir_kedisiplinan;
                 payload.catatan = currentReport.catatan;
                 payload.sakit = currentReport.sakit;
                 payload.izin = currentReport.izin;
@@ -268,6 +385,8 @@ export default function GuruInput() {
     }
 
     const tahsinAvg = calculateAverage(tahsin);
+    const akhlakAvg = calculateAverage(akhlak);
+    const kedisiplinanAvg = calculateAverage(kedisiplinan);
 
     return (
         <div className="space-y-6 pb-20">
@@ -394,6 +513,53 @@ export default function GuruInput() {
                                 </CardContent>
                             </Card>
                         </>
+                    )}
+
+                    {/* PEMBIMBING SECTION - Akhlak & Disiplin */}
+                    {isPembimbing && (
+                        <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
+                            <div className="flex items-center gap-2 text-purple-700 bg-purple-50 p-3 rounded-lg border border-purple-200">
+                                <span className="font-bold">Info:</span> Anda login sebagai Pembimbing Halaqah, silakan input nilai Akhlak & Kedisiplinan.
+                            </div>
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex justify-between items-center">
+                                        Akhlak & Perilaku (10-100)
+                                        <span className="text-blue-600">{formatScore(akhlakAvg)}</span>
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {Object.entries(akhlak).map(([key, val]) => (
+                                        <ScoreInput
+                                            key={key}
+                                            label={key}
+                                            value={val}
+                                            onChange={(v) => setAkhlak(prev => ({ ...prev, [key]: v }))}
+                                        />
+                                    ))}
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex justify-between items-center">
+                                        Kedisiplinan (10-100)
+                                        <span className="text-blue-600">{formatScore(kedisiplinanAvg)}</span>
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {Object.entries(kedisiplinan).map(([key, val]) => (
+                                        <ScoreInput
+                                            key={key}
+                                            label={key}
+                                            value={val}
+                                            onChange={(v) => setKedisiplinan(prev => ({ ...prev, [key]: v }))}
+                                        />
+                                    ))}
+                                </CardContent>
+                            </Card>
+                        </div>
                     )}
 
                     <div className="flex justify-end">

@@ -67,9 +67,26 @@ export default function RaportPrint() {
     if (error) return <div className="p-10 text-red-600">Error: {(error as Error).message}</div>;
     if (!report || !settings) return <div className="p-10">Data not found</div>;
 
+    // Fetch specific Pembimbing Assignment
+    const { data: pembimbingAssignment } = useQuery({
+        queryKey: ['pembimbing_assignment', report?.student?.halaqah_id],
+        enabled: !!report?.student?.halaqah_id,
+        queryFn: async () => {
+            const { data } = await supabase
+                .from('teacher_assignments')
+                .select('*, teacher:users(*)')
+                .eq('halaqah_id', report!.student.halaqah_id)
+                .eq('role', 'pembimbing')
+                .eq('is_active', true)
+                .maybeSingle(); // Use maybeSingle to avoid 406 error if not found
+            return data;
+        }
+    });
+
     const { student, semester, akhlak, kedisiplinan, kognitif, tahfidz_progress, sakit, izin, alpa } = report;
     const academicYear = semester.academic_year?.tahun_ajaran;
-    const guruPembimbing = student.halaqah_data?.guru;
+    // Prioritize assigned Pembimbing, fallback to Halaqah's default Guru
+    const guruPembimbing = pembimbingAssignment?.teacher || student.halaqah_data?.guru;
 
     // Helper to render Tahsin rows based on configuration
     const renderTahsinRows = () => {

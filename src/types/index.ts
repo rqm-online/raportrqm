@@ -127,4 +127,5 @@ export interface TeacherAssignment {
     // Joined data
     teacher?: User;
     halaqah?: Halaqah;
+    role?: 'guru' | 'pembimbing';
 }

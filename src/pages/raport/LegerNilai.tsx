@@ -311,14 +311,19 @@ export default function LegerNilai() {
                                     <tr key={row.student_id} className="border-b last:border-0 hover:bg-gray-50">
                                         <td className="px-4 py-3">{index + 1}</td>
                                         <td className="px-4 py-3">
-                                            <Link
-                                                to={`/raport/input?student=${row.student_id}`}
-                                                className="font-medium text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 w-fit"
-                                                title="Buka Input Raport untuk santri ini"
-                                            >
-                                                {row.student_name}
-                                                <ExternalLink className="h-3 w-3" />
-                                            </Link>
+                                            {session?.user?.id && (
+                                                <Link
+                                                    to={teacherAssignments && teacherAssignments.length > 0
+                                                        ? `/guru/input?student=${row.student_id}`
+                                                        : `/raport/input?student=${row.student_id}`
+                                                    }
+                                                    className="font-medium text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 w-fit"
+                                                    title="Buka Input Raport untuk santri ini"
+                                                >
+                                                    {row.student_name}
+                                                    <ExternalLink className="h-3 w-3" />
+                                                </Link>
+                                            )}
                                         </td>
                                         <td className="px-4 py-3">{row.halaqah_name || '-'}</td>
                                         <td className="px-4 py-3 text-center">{formatScore(row.nilai_akhir_akhlak)}</td>
