@@ -56,17 +56,6 @@ export default function RaportPrint() {
         }
     });
 
-    useEffect(() => {
-        if (!isLoading && report) {
-            // Set document title for PDF filename
-            document.title = `Raport - ${report.student.nama}`;
-        }
-    }, [isLoading, report]);
-
-    if (isLoading) return <div className="p-10">Loading...</div>;
-    if (error) return <div className="p-10 text-red-600">Error: {(error as Error).message}</div>;
-    if (!report || !settings) return <div className="p-10">Data not found</div>;
-
     // Fetch specific Pembimbing Assignment
     const { data: pembimbingAssignment } = useQuery({
         queryKey: ['pembimbing_assignment', report?.student?.halaqah_id],
@@ -82,6 +71,17 @@ export default function RaportPrint() {
             return data;
         }
     });
+
+    useEffect(() => {
+        if (!isLoading && report) {
+            // Set document title for PDF filename
+            document.title = `Raport - ${report.student.nama}`;
+        }
+    }, [isLoading, report]);
+
+    if (isLoading) return <div className="p-10">Loading...</div>;
+    if (error) return <div className="p-10 text-red-600">Error: {(error as Error).message}</div>;
+    if (!report || !settings) return <div className="p-10">Data not found</div>;
 
     const { student, semester, akhlak, kedisiplinan, kognitif, tahfidz_progress, sakit, izin, alpa } = report;
     const academicYear = semester.academic_year?.tahun_ajaran;
