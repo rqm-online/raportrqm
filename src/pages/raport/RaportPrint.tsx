@@ -12,6 +12,9 @@ export default function RaportPrint() {
     const { id } = useParams<{ id: string }>();
     const [theme, setTheme] = useState('black');
     const [size, setSize] = useState<'A4' | 'F4'>('A4');
+    const [breakBeforeKognitif, setBreakBeforeKognitif] = useState(false);
+    const [breakBeforeTahsin, setBreakBeforeTahsin] = useState(false);
+    const [breakBeforeUAS, setBreakBeforeUAS] = useState(false);
 
     const { data: report, isLoading, error, refetch } = useQuery({
         queryKey: ['report_print', id],
@@ -163,6 +166,12 @@ export default function RaportPrint() {
                 }}
                 onThemeChange={setTheme}
                 onSizeChange={setSize}
+                breakBeforeKognitif={breakBeforeKognitif}
+                setBreakBeforeKognitif={setBreakBeforeKognitif}
+                breakBeforeTahsin={breakBeforeTahsin}
+                setBreakBeforeTahsin={setBreakBeforeTahsin}
+                breakBeforeUAS={breakBeforeUAS}
+                setBreakBeforeUAS={setBreakBeforeUAS}
             />
 
             {/* HEADER / KOP */}
@@ -313,8 +322,8 @@ export default function RaportPrint() {
                     </div>
                 </div>
 
-                {/* KOGNITIF - New Page */}
-                <div className="relative z-10 print:break-before-page">
+                {/* KOGNITIF */}
+                <div className={`relative z-10 ${breakBeforeKognitif ? 'print:break-before-page' : ''}`}>
                     <h3 className="font-bold mb-1.5 border-b inline-block" style={headerStyle}>C. Kognitif Qur'ani</h3>
 
                     {/* TAHFIDZ DETAIL */}
@@ -352,7 +361,7 @@ export default function RaportPrint() {
                     </div>
 
                     {/* TAHSIN */}
-                    <div className="mb-2">
+                    <div className={`mb-2 ${breakBeforeTahsin ? 'print:break-before-page' : ''}`}>
                         <h4 className="font-semibold text-xs mb-0.5">2. Tahsin (Perbaikan Bacaan)</h4>
                         <table className="w-full border border-gray-300 text-xs">
                             <thead className="border-b border-gray-300" style={{ backgroundColor: theme !== 'black' ? theme : '#f3f4f6', color: theme !== 'black' ? 'white' : 'black' }}>
@@ -372,8 +381,8 @@ export default function RaportPrint() {
                 </div>
 
 
-                {/* UAS & ATTENDANCE - New Page */}
-                <div className="relative z-10 print:break-before-page">
+                {/* UAS & ATTENDANCE */}
+                <div className={`relative z-10 ${breakBeforeUAS ? 'print:break-before-page' : ''}`}>
                     {/* UAS */}
                     <div className="mb-4">
                         <h4 className="font-semibold text-xs mb-0.5">3. Ujian Akhir Semester</h4>

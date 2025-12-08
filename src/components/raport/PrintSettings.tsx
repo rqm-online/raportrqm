@@ -13,9 +13,27 @@ interface PrintSettingsProps {
     onSettingsChange: () => void;
     onThemeChange: (theme: string) => void;
     onSizeChange: (size: 'A4' | 'F4') => void;
+    breakBeforeKognitif: boolean;
+    setBreakBeforeKognitif: (value: boolean) => void;
+    breakBeforeTahsin: boolean;
+    setBreakBeforeTahsin: (value: boolean) => void;
+    breakBeforeUAS: boolean;
+    setBreakBeforeUAS: (value: boolean) => void;
 }
 
-export function PrintSettings({ settings, teacher, onSettingsChange, onThemeChange, onSizeChange }: PrintSettingsProps) {
+export function PrintSettings({
+    settings,
+    teacher,
+    onSettingsChange,
+    onThemeChange,
+    onSizeChange,
+    breakBeforeKognitif,
+    setBreakBeforeKognitif,
+    breakBeforeTahsin,
+    setBreakBeforeTahsin,
+    breakBeforeUAS,
+    setBreakBeforeUAS
+}: PrintSettingsProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [theme, setTheme] = useState('black');
     const [size, setSize] = useState<'A4' | 'F4'>('A4');
@@ -175,6 +193,52 @@ export function PrintSettings({ settings, teacher, onSettingsChange, onThemeChan
                             </Button>
                             <p className="text-xs text-gray-500 mt-2 text-center">
                                 Gunakan "Save as PDF" di dialog cetak
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* PAGE BREAK SETTINGS */}
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                            <FileText className="h-4 w-4" /> Pengaturan Halaman
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        <div className="space-y-2">
+                            <Label className="text-xs font-semibold">Halaman Baru Sebelum:</Label>
+                            <div className="space-y-2">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={breakBeforeKognitif}
+                                        onChange={(e) => setBreakBeforeKognitif(e.target.checked)}
+                                        className="w-4 h-4"
+                                    />
+                                    <span className="text-xs">C. Kognitif Qur'ani</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={breakBeforeTahsin}
+                                        onChange={(e) => setBreakBeforeTahsin(e.target.checked)}
+                                        className="w-4 h-4"
+                                    />
+                                    <span className="text-xs">2. Tahsin</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={breakBeforeUAS}
+                                        onChange={(e) => setBreakBeforeUAS(e.target.checked)}
+                                        className="w-4 h-4"
+                                    />
+                                    <span className="text-xs">3. Ujian Akhir Semester</span>
+                                </label>
+                            </div>
+                            <p className="text-[10px] text-gray-500 mt-2">
+                                * Centang untuk memulai bagian di halaman baru saat mencetak
                             </p>
                         </div>
                     </CardContent>
