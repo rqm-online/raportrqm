@@ -7,6 +7,9 @@ import { PrintSettings } from '../../components/raport/PrintSettings';
 export default function RaportPrintBlank() {
     const [theme, setTheme] = useState('black');
     const [size, setSize] = useState<'A4' | 'F4'>('A4');
+    const [breakBeforeKognitif, setBreakBeforeKognitif] = useState(false);
+    const [breakBeforeTahsin, setBreakBeforeTahsin] = useState(false);
+    const [breakBeforeUAS, setBreakBeforeUAS] = useState(false);
 
     const { data: settings } = useQuery({
         queryKey: ['settings'],
@@ -40,6 +43,12 @@ export default function RaportPrintBlank() {
                 onSettingsChange={() => { }}
                 onThemeChange={setTheme}
                 onSizeChange={setSize}
+                breakBeforeKognitif={breakBeforeKognitif}
+                setBreakBeforeKognitif={setBreakBeforeKognitif}
+                breakBeforeTahsin={breakBeforeTahsin}
+                setBreakBeforeTahsin={setBreakBeforeTahsin}
+                breakBeforeUAS={breakBeforeUAS}
+                setBreakBeforeUAS={setBreakBeforeUAS}
             />
 
             {/* HEADER / KOP */}
