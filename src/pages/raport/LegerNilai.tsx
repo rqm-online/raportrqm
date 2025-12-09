@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { Card, CardContent } from '../../components/ui/card';
@@ -32,6 +32,7 @@ export default function LegerNilai() {
     const { session } = useAuth();
     const [selectedHalaqahId, setSelectedHalaqahId] = useState<string>('');
     const [sortConfig, setSortConfig] = useState<SortConfig>(null);
+    const [isInitialized, setIsInitialized] = useState(false);
 
     // Fetch teacher assignments (for guru role)
     const { data: teacherAssignments } = useQuery({
@@ -79,6 +80,17 @@ export default function LegerNilai() {
         }
     });
 
+    // Auto-select first halaqah for teachers
+    useEffect(() => {
+        if (!isInitialized && halaqahList && teacherAssignments && teacherAssignments.length > 0) {
+            // If teacher has assignments and no halaqah is selected, auto-select the first one
+            if (!selectedHalaqahId && halaqahList.length > 0) {
+                setSelectedHalaqahId(halaqahList[0].id);
+            }
+            setIsInitialized(true);
+        }
+    }, [halaqahList, teacherAssignments, selectedHalaqahId, isInitialized]);
+
     // Fetch Settings for Predikat
     const { data: settings } = useQuery({
         queryKey: ['settings'],
@@ -90,7 +102,7 @@ export default function LegerNilai() {
 
     // Fetch Leger Data
     const { data: legerData, isLoading } = useQuery({
-        queryKey: ['leger', selectedHalaqahId, semesterData?.id],
+        queryKey: ['leger', selectedHalaqahId, semesterData?.id, assignedHalaqahIds],
         enabled: !!semesterData?.id,
         queryFn: async () => {
             let query = supabase
@@ -99,8 +111,13 @@ export default function LegerNilai() {
                 .eq('semester_id', semesterData!.id);
 
             if (selectedHalaqahId) {
+                // Filter by specific halaqah
                 query = query.eq('halaqah_id', selectedHalaqahId);
+            } else if (teacherAssignments && teacherAssignments.length > 0 && assignedHalaqahIds.length > 0) {
+                // For teachers without specific halaqah selected, filter by ALL assigned halaqahs
+                query = query.in('halaqah_id', assignedHalaqahIds);
             }
+            // For admin (no teacher assignments), show all students (no additional filter)
 
             const { data, error } = await query;
             if (error) throw error;
