@@ -347,6 +347,33 @@ export default function StudentSurahManagement() {
             {/* Content per Tab */}
             {activeTab === 'santri' ? (
                 <>
+                    {/* Halaqah Filter */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <BookOpen className="h-5 w-5" />
+                                Filter Halaqah
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <select
+                                className="w-full rounded-md border border-input bg-background px-3 py-2"
+                                value={selectedHalaqah}
+                                onChange={(e) => {
+                                    setSelectedHalaqah(e.target.value);
+                                    setSelectedStudent(''); // Reset student selection when halaqah changes
+                                }}
+                            >
+                                <option value="">-- Semua Halaqah --</option>
+                                {halaqahList?.map((h) => (
+                                    <option key={h.id} value={h.id}>
+                                        {h.nama}
+                                    </option>
+                                ))}
+                            </select>
+                        </CardContent>
+                    </Card>
+
                     {/* Student Selection */}
                     <Card>
                         <CardHeader>
@@ -362,11 +389,13 @@ export default function StudentSurahManagement() {
                                 onChange={(e) => setSelectedStudent(e.target.value)}
                             >
                                 <option value="">-- Pilih Santri --</option>
-                                {students?.map((s) => (
-                                    <option key={s.id} value={s.id}>
-                                        {s.nama} ({s.nis})
-                                    </option>
-                                ))}
+                                {students
+                                    ?.filter(s => !selectedHalaqah || s.halaqah_id === selectedHalaqah)
+                                    .map((s) => (
+                                        <option key={s.id} value={s.id}>
+                                            {s.nama} ({s.nis})
+                                        </option>
+                                    ))}
                             </select>
                         </CardContent>
                     </Card>

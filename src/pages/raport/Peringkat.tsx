@@ -229,61 +229,147 @@ export default function Peringkat() {
                     </CardContent>
                 </Card>
             ) : (
-                <div className="space-y-3">
-                    {sortedRankings.map((student, index) => {
-                        const rank = index + 1;
-                        const score = activeCategory === 'tahfidz' ? student.tahfidz_score : student.tahsin_score;
-                        const isTopThree = rank <= 3;
+                <div className="space-y-6">
+                    {/* Group by Halaqah */}
+                    {(() => {
+                        // Group rankings by halaqah
+                        const groupedByHalaqah = sortedRankings.reduce((acc, student) => {
+                            if (!acc[student.halaqah_name]) {
+                                acc[student.halaqah_name] = [];
+                            }
+                            acc[student.halaqah_name].push(student);
+                            return acc;
+                        }, {} as Record<string, RankingStudent[]>);
 
-                        return (
-                            <Card
-                                key={student.student_id}
-                                className={`transition-all hover:shadow-lg ${isTopThree ? 'border-2' : ''
-                                    } ${rank === 1 ? 'border-yellow-400 bg-yellow-50' :
-                                        rank === 2 ? 'border-gray-400 bg-gray-50' :
-                                            rank === 3 ? 'border-amber-500 bg-amber-50' : ''
-                                    }`}
-                            >
-                                <CardContent className="py-4">
-                                    <div className="flex items-center gap-4">
-                                        {/* Rank Badge */}
-                                        <div className="flex-shrink-0">
-                                            <div className={`w-16 h-16 rounded-full flex flex-col items-center justify-center ${getRankBadgeColor(rank)}`}>
-                                                {getRankIcon(rank)}
-                                                <span className="text-xs font-bold mt-1">#{rank}</span>
-                                            </div>
-                                        </div>
+                        // If a specific halaqah is selected, show flat list
+                        if (selectedHalaqahId) {
+                            return (
+                                <div className="space-y-3">
+                                    {sortedRankings.map((student, index) => {
+                                        const rank = index + 1;
+                                        const score = activeCategory === 'tahfidz' ? student.tahfidz_score : student.tahsin_score;
+                                        const isTopThree = rank <= 3;
 
-                                        {/* Student Info */}
-                                        <div className="flex-1">
-                                            <h3 className="text-lg font-bold text-gray-900">
-                                                {student.student_name}
-                                            </h3>
-                                            <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
-                                                <span>NIS: {student.nis}</span>
-                                                <span>•</span>
-                                                <span>{student.halaqah_name}</span>
-                                            </div>
-                                        </div>
+                                        return (
+                                            <Card
+                                                key={student.student_id}
+                                                className={`transition-all hover:shadow-lg ${isTopThree ? 'border-2' : ''
+                                                    } ${rank === 1 ? 'border-yellow-400 bg-yellow-50' :
+                                                        rank === 2 ? 'border-gray-400 bg-gray-50' :
+                                                            rank === 3 ? 'border-amber-500 bg-amber-50' : ''
+                                                    }`}
+                                            >
+                                                <CardContent className="py-4">
+                                                    <div className="flex items-center gap-4">
+                                                        {/* Rank Badge */}
+                                                        <div className="flex-shrink-0">
+                                                            <div className={`w-16 h-16 rounded-full flex flex-col items-center justify-center ${getRankBadgeColor(rank)}`}>
+                                                                {getRankIcon(rank)}
+                                                                <span className="text-xs font-bold mt-1">#{rank}</span>
+                                                            </div>
+                                                        </div>
 
-                                        {/* Score */}
-                                        <div className="flex-shrink-0 text-right">
-                                            <div className={`text-3xl font-bold ${rank === 1 ? 'text-yellow-600' :
-                                                rank === 2 ? 'text-gray-600' :
-                                                    rank === 3 ? 'text-amber-600' :
-                                                        'text-gray-700'
-                                                }`}>
-                                                {score.toFixed(1)}
-                                            </div>
-                                            <div className="text-xs text-gray-500 mt-1">
-                                                {activeCategory === 'tahfidz' ? 'Nilai Tahfidz' : 'Nilai Tahsin'}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        );
-                    })}
+                                                        {/* Student Info */}
+                                                        <div className="flex-1">
+                                                            <h3 className="text-lg font-bold text-gray-900">
+                                                                {student.student_name}
+                                                            </h3>
+                                                            <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
+                                                                <span>NIS: {student.nis}</span>
+                                                                <span>•</span>
+                                                                <span>{student.halaqah_name}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Score */}
+                                                        <div className="flex-shrink-0 text-right">
+                                                            <div className={`text-3xl font-bold ${rank === 1 ? 'text-yellow-600' :
+                                                                rank === 2 ? 'text-gray-600' :
+                                                                    rank === 3 ? 'text-amber-600' :
+                                                                        'text-gray-700'
+                                                                }`}>
+                                                                {score.toFixed(1)}
+                                                            </div>
+                                                            <div className="text-xs text-gray-500 mt-1">
+                                                                {activeCategory === 'tahfidz' ? 'Nilai Tahfidz' : 'Nilai Tahsin'}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        }
+
+                        // Show grouped by halaqah
+                        return Object.entries(groupedByHalaqah).map(([halaqahName, students]) => (
+                            <div key={halaqahName} className="space-y-3">
+                                {/* Halaqah Header */}
+                                <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-4 rounded-lg shadow-md">
+                                    <h2 className="text-xl font-bold">{halaqahName}</h2>
+                                    <p className="text-sm text-blue-100 mt-1">
+                                        {students.length} santri • {activeCategory === 'tahfidz' ? 'Tahfidz' : 'Tahsin'}
+                                    </p>
+                                </div>
+
+                                {/* Students in this Halaqah */}
+                                {students.map((student, index) => {
+                                    const rank = index + 1;
+                                    const score = activeCategory === 'tahfidz' ? student.tahfidz_score : student.tahsin_score;
+                                    const isTopThree = rank <= 3;
+
+                                    return (
+                                        <Card
+                                            key={student.student_id}
+                                            className={`transition-all hover:shadow-lg ${isTopThree ? 'border-2' : ''
+                                                } ${rank === 1 ? 'border-yellow-400 bg-yellow-50' :
+                                                    rank === 2 ? 'border-gray-400 bg-gray-50' :
+                                                        rank === 3 ? 'border-amber-500 bg-amber-50' : ''
+                                                }`}
+                                        >
+                                            <CardContent className="py-4">
+                                                <div className="flex items-center gap-4">
+                                                    {/* Rank Badge */}
+                                                    <div className="flex-shrink-0">
+                                                        <div className={`w-16 h-16 rounded-full flex flex-col items-center justify-center ${getRankBadgeColor(rank)}`}>
+                                                            {getRankIcon(rank)}
+                                                            <span className="text-xs font-bold mt-1">#{rank}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Student Info */}
+                                                    <div className="flex-1">
+                                                        <h3 className="text-lg font-bold text-gray-900">
+                                                            {student.student_name}
+                                                        </h3>
+                                                        <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
+                                                            <span>NIS: {student.nis}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Score */}
+                                                    <div className="flex-shrink-0 text-right">
+                                                        <div className={`text-3xl font-bold ${rank === 1 ? 'text-yellow-600' :
+                                                            rank === 2 ? 'text-gray-600' :
+                                                                rank === 3 ? 'text-amber-600' :
+                                                                    'text-gray-700'
+                                                            }`}>
+                                                            {score.toFixed(1)}
+                                                        </div>
+                                                        <div className="text-xs text-gray-500 mt-1">
+                                                            {activeCategory === 'tahfidz' ? 'Nilai Tahfidz' : 'Nilai Tahsin'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    );
+                                })}
+                            </div>
+                        ));
+                    })()}
                 </div>
             )}
 
