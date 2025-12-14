@@ -30,8 +30,8 @@ export default function GuruInput() {
 
     // Tahsin State
     const [tahsin, setTahsin] = useState<Record<string, number>>({});
-    const [uasTulis, setUasTulis] = useState(10);
-    const [uasLisan, setUasLisan] = useState(10);
+    const [uasTulis, setUasTulis] = useState(0);
+    const [uasLisan, setUasLisan] = useState(0);
 
     // Fetch active semester
     const { data: activeSemesterData } = useQuery({
@@ -215,11 +215,11 @@ export default function GuruInput() {
                 const savedTahsin = existingReport.kognitif?.Tahsin || {};
                 const newTahsin: Record<string, number> = {};
                 activeTahsinItems.forEach(item => {
-                    newTahsin[item] = savedTahsin[item] || 10;
+                    newTahsin[item] = savedTahsin[item] || 0;
                 });
                 setTahsin(newTahsin);
-                setUasTulis(existingReport.uas_tulis || 10);
-                setUasLisan(existingReport.uas_lisan || 10);
+                setUasTulis(existingReport.uas_tulis || 0);
+                setUasLisan(existingReport.uas_lisan || 0);
 
                 // Load Akhlak & Kedisiplinan if Pembimbing
                 if (isPembimbing) {
@@ -230,11 +230,11 @@ export default function GuruInput() {
                 // Reset to defaults
                 const initialTahsin: Record<string, number> = {};
                 activeTahsinItems.forEach(item => {
-                    initialTahsin[item] = 10;
+                    initialTahsin[item] = 0;
                 });
                 setTahsin(initialTahsin);
-                setUasTulis(10);
-                setUasLisan(10);
+                setUasTulis(0);
+                setUasLisan(0);
 
                 if (isPembimbing) {
                     setAkhlak(defaultAkhlak);

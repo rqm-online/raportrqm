@@ -83,7 +83,7 @@ export function TahfidzInput({ reportCardId, studentId, onScoreChange, onProgres
     useEffect(() => {
         const scores = Object.values(progressData);
         if (scores.length === 0) {
-            onScoreChange(10); // Default minimum
+            onScoreChange(0); // Default to 0 (blank)
             return;
         }
 
@@ -122,8 +122,8 @@ export function TahfidzInput({ reportCardId, studentId, onScoreChange, onProgres
         setProgressData(prev => ({
             ...prev,
             [surahId]: {
-                kb: field === 'kb' ? value : (prev[surahId]?.kb || 10),
-                kh: field === 'kh' ? value : (prev[surahId]?.kh || 10)
+                kb: field === 'kb' ? value : (prev[surahId]?.kb || 0),
+                kh: field === 'kh' ? value : (prev[surahId]?.kh || 0)
             }
         }));
     };
@@ -139,7 +139,7 @@ export function TahfidzInput({ reportCardId, studentId, onScoreChange, onProgres
     const handleAddSurah = (surah: SurahMaster) => {
         setProgressData(prev => ({
             ...prev,
-            [surah.id]: { kb: 10, kh: 10 }
+            [surah.id]: { kb: 0, kh: 0 }
         }));
     };
 
@@ -381,21 +381,21 @@ export function TahfidzInput({ reportCardId, studentId, onScoreChange, onProgres
                                         <div className="grid grid-cols-2 gap-2">
                                             <ScoreInput
                                                 label="KB"
-                                                value={progress?.kb || 10}
+                                                value={progress?.kb || 0}
                                                 onChange={(val) => handleScoreChange(surah.id, 'kb', val)}
                                                 min={10}
                                                 max={100}
                                             />
                                             <ScoreInput
                                                 label="KH"
-                                                value={progress?.kh || 10}
+                                                value={progress?.kh || 0}
                                                 onChange={(val) => handleScoreChange(surah.id, 'kh', val)}
                                                 min={10}
                                                 max={100}
                                             />
                                         </div>
                                         <div className="text-xs text-gray-500 text-right">
-                                            Rata-rata: {((progress?.kb || 10) + (progress?.kh || 10)) / 2}
+                                            Rata-rata: {((progress?.kb || 0) + (progress?.kh || 0)) / 2}
                                         </div>
                                     </div>
                                 );

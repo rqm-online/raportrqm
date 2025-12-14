@@ -22,6 +22,10 @@ export function ScoreInput({ label, value, onChange, min = 10, max = 100, disabl
                 className="w-20 text-right"
                 value={value === 0 ? '' : value}
                 disabled={disabled}
+                onFocus={(e) => {
+                    // Auto-select all text when input is clicked
+                    e.target.select();
+                }}
                 onChange={(e) => {
                     const inputValue = e.target.value;
                     if (inputValue === '') {
