@@ -73,7 +73,7 @@ export default function Peringkat() {
 
     // Fetch Rankings
     const { data: rankingData, isLoading } = useQuery({
-        queryKey: ['rankings', selectedHalaqahId, semesterData?.id],
+        queryKey: ['rankings', selectedHalaqahId, semesterData?.id, assignedHalaqahIds],
         enabled: !!semesterData?.id,
         queryFn: async () => {
             let query = supabase
@@ -86,7 +86,11 @@ export default function Peringkat() {
                 .eq('semester_id', semesterData!.id);
 
             if (selectedHalaqahId) {
+                // Filter by specific halaqah if selected
                 query = query.eq('students.halaqah_id', selectedHalaqahId);
+            } else if (teacherAssignments && teacherAssignments.length > 0 && assignedHalaqahIds.length > 0) {
+                // For guru role: filter by assigned halaqahs when "Semua Halaqah" is selected
+                query = query.in('students.halaqah_id', assignedHalaqahIds);
             }
 
             const { data, error } = await query;
