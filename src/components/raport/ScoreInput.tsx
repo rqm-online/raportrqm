@@ -19,7 +19,7 @@ export function ScoreInput({ label, value, onChange, min = 10, max = 100, disabl
                 min={min}
                 max={max}
                 step={1}
-                className="w-20 text-right"
+                className="w-20 text-right [&::-webkit-inner-spin-button]:opacity-100 [&::-webkit-outer-spin-button]:opacity-100"
                 value={value === 0 ? '' : value}
                 disabled={disabled}
                 onFocus={(e) => {
