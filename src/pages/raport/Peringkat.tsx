@@ -81,7 +81,8 @@ export default function Peringkat() {
                 .select(`
                     student_id,
                     students!inner(nama, nis, halaqah_id, halaqah:halaqah(nama)),
-                    kognitif
+                    kognitif,
+                    tahfidz_progress(kb, kh)
                 `)
                 .eq('semester_id', semesterData!.id);
 
@@ -99,12 +100,24 @@ export default function Peringkat() {
             // Process and calculate scores
             const processed = data?.map((item: any) => {
                 const kognitif = item.kognitif || {};
+                const tahfidzProgress = item.tahfidz_progress || [];
 
-                // Calculate Tahfidz score (average of all Tahfidz values)
-                const tahfidzValues = kognitif.Tahfidz ? Object.values(kognitif.Tahfidz) as any[] : [];
-                const tahfidzScore = tahfidzValues.length > 0
-                    ? tahfidzValues.reduce((a: any, b: any) => a + b, 0) / tahfidzValues.length
-                    : 0;
+                // Calculate Tahfidz score
+                let tahfidzScore = 0;
+
+                if (tahfidzProgress.length > 0) {
+                    // Average of all progress items (kb + kh) / 2
+                    const totalScore = tahfidzProgress.reduce((sum: number, prog: any) => {
+                        return sum + ((prog.kb || 0) + (prog.kh || 0)) / 2;
+                    }, 0);
+                    tahfidzScore = totalScore / tahfidzProgress.length;
+                } else {
+                    // Fallback to legacy kognitif.Tahfidz
+                    const tahfidzValues = kognitif.Tahfidz ? Object.values(kognitif.Tahfidz) as any[] : [];
+                    tahfidzScore = tahfidzValues.length > 0
+                        ? tahfidzValues.reduce((a: any, b: any) => a + b, 0) / tahfidzValues.length
+                        : 0;
+                }
 
                 // Calculate Tahsin score (average of all Tahsin values)
                 const tahsinValues = kognitif.Tahsin ? Object.values(kognitif.Tahsin) as any[] : [];

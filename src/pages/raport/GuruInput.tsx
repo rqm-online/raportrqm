@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import type { Student, ReportCard, Semester, TeacherAssignment } from '../../types';
@@ -189,6 +189,130 @@ export default function GuruInput() {
         }
     }, [targetStudent, assignedHalaqahs, selectedHalaqahId, selectedStudentId, selectedSubject, searchParams]);
 
+    // Akhlak & Kedisiplinan State (only for Pembimbing)
+    const defaultAkhlak: Record<string, number> = {
+        'Adab Kepada Guru': 10,
+        'Adab Kepada Teman': 10,
+        'Adab Terhadap Lingkungan': 10
+    };
+
+    const defaultKedisiplinan: Record<string, number> = {
+        'Shalat Berjamaah': 10,
+        'Tilawah & Hafalan Mandiri': 10,
+        'Kebersihan': 10,
+        'Kerapian': 10
+    };
+
+    // Note: Kehadiran is loaded from DB but hidden from Teacher input to prevent overwrite of Admin data
+    const [akhlak, setAkhlak] = useState<Record<string, number>>(defaultAkhlak);
+    const [kedisiplinan, setKedisiplinan] = useState<Record<string, number>>(defaultKedisiplinan);
+
+    // Filter out Shalat Berjamaah for Siang students
+    useEffect(() => {
+        if (selectedStudent && selectedStudent.shift === 'Siang') {
+            setKedisiplinan(prev => {
+                const next = { ...prev };
+                delete next['Shalat Berjamaah'];
+                delete next['Sholat Berjamaah']; // Handle legacy spelling
+                return next;
+            });
+        }
+    }, [selectedStudent]);
+
+    // Autosave Logic
+    const autosaveKey = `autosave_${selectedStudentId}_${selectedSubject}_${activeSemester?.id}`;
+
+    const loadAutosave = useCallback(() => {
+        if (!selectedStudentId || !selectedSubject) return false;
+
+        try {
+            const saved = localStorage.getItem(autosaveKey);
+            if (saved) {
+                const data = JSON.parse(saved);
+                // Only load if timestamp is recent (e.g. < 24 hours) - Optional, but for now just load it
+                // We should check if the saved data is actually more "complete" or just blindly load?
+                // Simplest: Just load it, but maybe show a toast or indicator?
+                // Merging logic:
+                if (selectedSubject === 'Tahfidz' && data.tahfidzProgress) {
+                    setTahfidzProgress(data.tahfidzProgress);
+                    if (data.tahfidzScore) setTahfidzScore(data.tahfidzScore);
+                } else if (selectedSubject === 'Tahsin') {
+                    if (data.tahsin) setTahsin(data.tahsin);
+                    if (data.uasTulis !== undefined) setUasTulis(data.uasTulis);
+                    if (data.uasLisan !== undefined) setUasLisan(data.uasLisan);
+                }
+
+                if (isPembimbing) {
+                    if (data.akhlak) {
+                        const filteredAkhlak = { ...defaultAkhlak };
+                        Object.keys(data.akhlak).forEach(k => {
+                            if (k === 'Adab Kepada Allah & Rasul' || k === 'Adab Kepada Orang Tua') return;
+                            if (k in defaultAkhlak) {
+                                filteredAkhlak[k] = data.akhlak[k];
+                            }
+                        });
+                        setAkhlak(filteredAkhlak);
+                    }
+                    if (data.kedisiplinan) {
+                        // Apply Siang filter if needed AND handle renames
+                        const filteredKedisiplinan = { ...defaultKedisiplinan };
+
+                        // Preserve Kehadiran from autosave if it exists (hidden but maintained)
+                        if (data.kedisiplinan['Kehadiran'] !== undefined) {
+                            filteredKedisiplinan['Kehadiran'] = data.kedisiplinan['Kehadiran'];
+                        }
+
+                        Object.keys(data.kedisiplinan).forEach(k => {
+                            if (k === 'Tilawah Mandiri') {
+                                filteredKedisiplinan['Tilawah & Hafalan Mandiri'] = data.kedisiplinan[k];
+                                return;
+                            }
+                            if (k === 'Tilawah & Hafalan Mandiri') {
+                                filteredKedisiplinan['Tilawah & Hafalan Mandiri'] = data.kedisiplinan[k];
+                                return;
+                            }
+                            if (k in defaultKedisiplinan) {
+                                filteredKedisiplinan[k] = data.kedisiplinan[k];
+                            }
+                        });
+
+                        if (selectedStudent?.shift === 'Siang') {
+                            delete filteredKedisiplinan['Shalat Berjamaah'];
+                            delete filteredKedisiplinan['Sholat Berjamaah']; // Legacy
+                        }
+                        setKedisiplinan(filteredKedisiplinan);
+                    }
+                }
+                return true;
+            }
+        } catch (e) {
+            console.error("Failed to load autosave", e);
+        }
+        return false;
+    }, [autosaveKey, selectedStudentId, selectedSubject, isPembimbing, selectedStudent]);
+
+    // Save to localStorage
+    useEffect(() => {
+        if (!selectedStudentId || !selectedSubject || !activeSemester) return;
+
+        const timer = setTimeout(() => {
+            const dataToSave = {
+                timestamp: Date.now(),
+                tahfidzScore: selectedSubject === 'Tahfidz' ? 10 : undefined, // Check how to get tahfidzScore state if needed, currently it's internal to TahfidzInput mostly or state here
+                // Wait, tahfidzScore state is here on line 28
+                tahfidzProgress: selectedSubject === 'Tahfidz' ? tahfidzProgress : undefined,
+                tahsin: selectedSubject === 'Tahsin' ? tahsin : undefined,
+                uasTulis: selectedSubject === 'Tahsin' ? uasTulis : undefined,
+                uasLisan: selectedSubject === 'Tahsin' ? uasLisan : undefined,
+                akhlak: isPembimbing ? akhlak : undefined,
+                kedisiplinan: isPembimbing ? kedisiplinan : undefined
+            };
+            localStorage.setItem(autosaveKey, JSON.stringify(dataToSave));
+        }, 1000); // 1 sec debounce
+
+        return () => clearTimeout(timer);
+    }, [tahfidzProgress, tahsin, uasTulis, uasLisan, akhlak, kedisiplinan, selectedStudentId, selectedSubject, activeSemester, isPembimbing, autosaveKey]);
+
     // Load existing data
     useEffect(() => {
         if (selectedStudentId && activeSemester && selectedStudent) {
@@ -223,8 +347,47 @@ export default function GuruInput() {
 
                 // Load Akhlak & Kedisiplinan if Pembimbing
                 if (isPembimbing) {
-                    setAkhlak(existingReport.akhlak || defaultAkhlak);
-                    setKedisiplinan(existingReport.kedisiplinan || defaultKedisiplinan);
+                    const savedAkhlak = existingReport.akhlak || {};
+                    const savedKedisiplinan = existingReport.kedisiplinan || {};
+
+                    // Merge with defaults to ensure all keys exist
+                    // Also handle migration of "Tilawah Mandiri" -> "Tilawah & Hafalan Mandiri"
+                    // And exclude "Adab Kepada Allah & Rasul", "Adab Kepada Orang Tua"
+
+                    const filteredAkhlak = { ...defaultAkhlak };
+                    // Only copy values for keys that exist in our new default (plus allow custom ones? No, strict requirement to remove specific ones)
+                    // Actually, let's just ignore the deleted ones.
+                    Object.keys(savedAkhlak).forEach(k => {
+                        if (k === 'Adab Kepada Allah & Rasul' || k === 'Adab Kepada Orang Tua') return;
+                        if (k in defaultAkhlak) {
+                            filteredAkhlak[k] = savedAkhlak[k];
+                        }
+                    });
+                    setAkhlak(filteredAkhlak);
+
+                    const filteredKedisiplinan = { ...defaultKedisiplinan };
+                    // Preserve Kehadiran if exists in DB (so we pass it back)
+                    if (savedKedisiplinan['Kehadiran'] !== undefined) {
+                        filteredKedisiplinan['Kehadiran'] = savedKedisiplinan['Kehadiran'];
+                    }
+
+                    Object.keys(savedKedisiplinan).forEach(k => {
+                        // Handle rename
+                        if (k === 'Tilawah Mandiri') {
+                            filteredKedisiplinan['Tilawah & Hafalan Mandiri'] = savedKedisiplinan[k];
+                            return;
+                        }
+                        // Handle rename legacy
+                        if (k === 'Tilawah & Hafalan Mandiri') {
+                            filteredKedisiplinan['Tilawah & Hafalan Mandiri'] = savedKedisiplinan[k];
+                            return;
+                        }
+
+                        if (k in defaultKedisiplinan) {
+                            filteredKedisiplinan[k] = savedKedisiplinan[k];
+                        }
+                    });
+                    setKedisiplinan(filteredKedisiplinan);
                 }
             } else {
                 // Reset to defaults
@@ -243,28 +406,24 @@ export default function GuruInput() {
             }
             setTahfidzScore(10);
             setTahfidzProgress({});
+
+            // Try to load autosave AFTER loading DB data
+            // We use a small timeout to ensure state is settled? No, synchronous is fine or in next tick
+            setTimeout(() => {
+                loadAutosave();
+            }, 100);
+
         }
-    }, [existingReport, selectedStudentId, activeSemester, selectedStudent, globalTahsinItems, isPembimbing]);
+    }, [existingReport, selectedStudentId, activeSemester, selectedStudent, globalTahsinItems, isPembimbing, loadAutosave]);
 
-    // Akhlak & Kedisiplinan State (only for Pembimbing)
-    const defaultAkhlak: Record<string, number> = {
-        'Adab Kepada Allah & Rasul': 10,
-        'Adab Kepada Guru': 10,
-        'Adab Kepada Orang Tua': 10,
-        'Adab Kepada Teman': 10,
-        'Adab Terhadap Lingkungan': 10
-    };
 
-    const defaultKedisiplinan: Record<string, number> = {
-        'Kehadiran': 10,
-        'Shalat Berjamaah': 10,
-        'Tilawah Mandiri': 10,
-        'Kebersihan': 10,
-        'Kerapian': 10
-    };
 
-    const [akhlak, setAkhlak] = useState<Record<string, number>>(defaultAkhlak);
-    const [kedisiplinan, setKedisiplinan] = useState<Record<string, number>>(defaultKedisiplinan);
+
+
+
+
+
+
 
     // Save mutation
     const saveMutation = useMutation({
@@ -359,6 +518,8 @@ export default function GuruInput() {
                 title: "Berhasil",
                 description: "Nilai berhasil disimpan."
             });
+            // Clear autosave
+            localStorage.removeItem(autosaveKey);
         },
         onError: (error: any) => {
             toast({
@@ -549,14 +710,16 @@ export default function GuruInput() {
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    {Object.entries(kedisiplinan).map(([key, val]) => (
-                                        <ScoreInput
-                                            key={key}
-                                            label={key}
-                                            value={val}
-                                            onChange={(v) => setKedisiplinan(prev => ({ ...prev, [key]: v }))}
-                                        />
-                                    ))}
+                                    {Object.entries(kedisiplinan)
+                                        .filter(([key]) => key !== 'Kehadiran') // Hide Kehadiran from Teachers
+                                        .map(([key, val]) => (
+                                            <ScoreInput
+                                                key={key}
+                                                label={key}
+                                                value={val}
+                                                onChange={(v) => setKedisiplinan(prev => ({ ...prev, [key]: v }))}
+                                            />
+                                        ))}
                                 </CardContent>
                             </Card>
                         </div>

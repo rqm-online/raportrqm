@@ -15,17 +15,18 @@ import { UnsavedChangesDialog } from '../../components/ui/unsaved-changes-dialog
 import { useAuth } from '../../hooks/useAuth';
 
 // Default structure for new report card
-const defaultAkhlak = {
-    "Adab Terhadap Guru": 10,
-    "Adab Terhadap Teman": 10,
-    "Kerajinan": 10,
-    "Kebersihan": 10,
+const defaultAkhlak: Record<string, number> = {
+    "Adab Kepada Guru": 10,
+    "Adab Kepada Teman": 10,
+    "Adab Terhadap Lingkungan": 10
 };
 
-const defaultKedisiplinan = {
-    "Sholat Berjamaah": 10,
-    "Kehadiran": 10,
-    "Ketepatan Waktu": 10,
+const defaultKedisiplinan: Record<string, number> = {
+    "Shalat Berjamaah": 10,
+    "Kehadiran": 10, // Admin still sees this
+    "Tilawah & Hafalan Mandiri": 10,
+    "Kebersihan": 10,
+    "Kerapian": 10
 };
 
 const defaultKognitif = {
@@ -178,8 +179,47 @@ export default function RaportInput() {
 
             if (existingReport) {
                 // Load from saved report
-                setAkhlak(existingReport.akhlak || defaultAkhlak);
-                setKedisiplinan(existingReport.kedisiplinan || defaultKedisiplinan);
+                // Load from saved report with migration logic
+                // Ensure legacy items are removed and renamed items are mapped
+
+                // Migrate Akhlak
+                const savedAkhlak = existingReport.akhlak || {};
+                const newAkhlak = { ...defaultAkhlak };
+                Object.keys(savedAkhlak).forEach(k => {
+                    // Filter out removed items
+                    if (k === 'Adab Kepada Allah & Rasul' || k === 'Adab Kepada Orang Tua') return;
+                    // Map keys if needed (Adab Terhadap... -> Adab Kepada...)
+                    // The previous default had "Adab Terhadap Guru", new has "Adab Kepada Guru"
+                    // We should normalize.
+                    let normalizedKey = k;
+                    if (k === 'Adab Terhadap Guru') normalizedKey = 'Adab Kepada Guru';
+                    if (k === 'Adab Terhadap Teman') normalizedKey = 'Adab Kepada Teman';
+
+                    if (normalizedKey in newAkhlak) {
+                        newAkhlak[normalizedKey] = savedAkhlak[k];
+                    }
+                });
+                setAkhlak(newAkhlak);
+
+                // Migrate Kedisiplinan
+                const savedKedisiplinan = existingReport.kedisiplinan || {};
+                const newKedisiplinan = { ...defaultKedisiplinan };
+                Object.keys(savedKedisiplinan).forEach(k => {
+                    // Rename logic
+                    if (k === 'Tilawah Mandiri') {
+                        newKedisiplinan['Tilawah & Hafalan Mandiri'] = savedKedisiplinan[k];
+                        return;
+                    }
+                    if (k === 'Sholat Berjamaah') {
+                        newKedisiplinan['Shalat Berjamaah'] = savedKedisiplinan[k];
+                        return;
+                    }
+
+                    if (k in newKedisiplinan) {
+                        newKedisiplinan[k] = savedKedisiplinan[k];
+                    }
+                });
+                setKedisiplinan(newKedisiplinan);
 
                 // Merge existing scores with active items
                 // If an item is active but has no score, set default 10
