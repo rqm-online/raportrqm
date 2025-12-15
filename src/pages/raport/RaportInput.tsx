@@ -390,7 +390,16 @@ export default function RaportInput() {
     const kedisiplinanAvg = calculateAverage(kedisiplinanForCalc);
 
     const tahsinAvg = calculateAverage(tahsin);
-    const kognitifScore = (tahfidzScore + tahsinAvg + uasTulis + uasLisan) / 4;
+
+    // Calculate Kognitif Score (Dynamic Divisor)
+    let kognitifScore = 0;
+    if (settings?.show_uas_lisan === false) {
+        // Did not include UAS Lisan if hidden
+        kognitifScore = (tahfidzScore + tahsinAvg + uasTulis) / 3;
+    } else {
+        // Default behavior (include UAS Lisan)
+        kognitifScore = (tahfidzScore + tahsinAvg + uasTulis + uasLisan) / 4;
+    }
 
     const finalScore = settings ? calculateFinalScore(akhlakAvg, kedisiplinanAvg, kognitifScore, settings) : 0;
     const predikat = settings ? getPredikat(finalScore, settings.skala_penilaian) : '-';
