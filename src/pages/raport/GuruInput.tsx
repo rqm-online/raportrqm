@@ -59,12 +59,12 @@ export default function GuruInput() {
                 .from('teacher_assignments')
                 .select(`
                     *,
-                    halaqah:halaqah!halaqah_id(id, nama)
+                    halaqah:halaqah!halaqah_id(id, nama, shift)
                 `)
                 .eq('teacher_id', session!.user!.id)
                 .eq('is_active', true);
             if (error) throw error;
-            return data as (TeacherAssignment & { halaqah: { id: string; nama: string } })[];
+            return data as (TeacherAssignment & { halaqah: { id: string; nama: string; shift?: 'Siang' | 'Sore' } })[];
         }
     });
 
@@ -196,28 +196,58 @@ export default function GuruInput() {
         'Adab Terhadap Lingkungan': 10
     };
 
-    const defaultKedisiplinan: Record<string, number> = {
-        'Shalat Berjamaah': 10,
-        'Tilawah & Hafalan Mandiri': 10,
-        'Kebersihan': 10,
-        'Kerapian': 10
+    // Helper function to create kedisiplinan based on shift (no Kehadiran for teachers)
+    const createKedisiplinan = (shift?: 'Siang' | 'Sore' | null): Record<string, number> => {
+        const base: Record<string, number> = {
+            'Tilawah & Hafalan Mandiri': 10,
+            'Kebersihan': 10,
+            'Kerapian': 10,
+            'Ketepatan Waktu': 10
+        };
+
+        // Only add Shalat Berjamaah if NOT Siang shift
+        if (shift !== 'Siang') {
+            base['Shalat Berjamaah'] = 10;
+        }
+
+        return base;
     };
 
     // Note: Kehadiran is loaded from DB but hidden from Teacher input to prevent overwrite of Admin data
     const [akhlak, setAkhlak] = useState<Record<string, number>>(defaultAkhlak);
-    const [kedisiplinan, setKedisiplinan] = useState<Record<string, number>>(defaultKedisiplinan);
+    const [kedisiplinan, setKedisiplinan] = useState<Record<string, number>>({});
 
-    // Filter out Shalat Berjamaah for Siang students
+    // Initialize kedisiplinan when student/halaqah changes
     useEffect(() => {
-        if (selectedStudent && selectedStudent.shift === 'Siang') {
-            setKedisiplinan(prev => {
-                const next = { ...prev };
-                delete next['Shalat Berjamaah'];
-                delete next['Sholat Berjamaah']; // Handle legacy spelling
-                return next;
-            });
+        if (selectedStudent && selectedHalaqahId) {
+            const currentHalaqah = assignedHalaqahs.find(h => h.id === selectedHalaqahId);
+            const shiftToCheck = currentHalaqah?.shift || selectedStudent?.shift;
+
+            // Only reset if kedisiplinan is empty
+            if (Object.keys(kedisiplinan).length === 0) {
+                setKedisiplinan(createKedisiplinan(shiftToCheck));
+            } else {
+                // Check if we need to add/remove Shalat Berjamaah
+                const shouldHaveShalatBerjamaah = shiftToCheck !== 'Siang';
+                const currentlyHasShalatBerjamaah = 'Shalat Berjamaah' in kedisiplinan;
+
+                if (shouldHaveShalatBerjamaah !== currentlyHasShalatBerjamaah) {
+                    setKedisiplinan(prev => {
+                        const next = { ...prev };
+                        if (shouldHaveShalatBerjamaah) {
+                            // Add Shalat Berjamaah if missing
+                            next['Shalat Berjamaah'] = 10;
+                        } else {
+                            // Remove Shalat Berjamaah if present
+                            delete next['Shalat Berjamaah'];
+                            delete next['Sholat Berjamaah']; // Legacy
+                        }
+                        return next;
+                    });
+                }
+            }
         }
-    }, [selectedStudent]);
+    }, [selectedStudent?.id, selectedHalaqahId, selectedStudent?.shift, assignedHalaqahs]);
 
     // Autosave Logic
     const autosaveKey = `autosave_${selectedStudentId}_${selectedSubject}_${activeSemester?.id}`;
@@ -255,7 +285,9 @@ export default function GuruInput() {
                     }
                     if (data.kedisiplinan) {
                         // Apply Siang filter if needed AND handle renames
-                        const filteredKedisiplinan = { ...defaultKedisiplinan };
+                        const currentHalaqah = assignedHalaqahs.find(h => h.id === selectedHalaqahId);
+                        const shiftToCheck = currentHalaqah?.shift || selectedStudent?.shift;
+                        const filteredKedisiplinan = createKedisiplinan(shiftToCheck);
 
                         // Preserve Kehadiran from autosave if it exists (hidden but maintained)
                         if (data.kedisiplinan['Kehadiran'] !== undefined) {
@@ -271,12 +303,12 @@ export default function GuruInput() {
                                 filteredKedisiplinan['Tilawah & Hafalan Mandiri'] = data.kedisiplinan[k];
                                 return;
                             }
-                            if (k in defaultKedisiplinan) {
+                            if (k in filteredKedisiplinan) {
                                 filteredKedisiplinan[k] = data.kedisiplinan[k];
                             }
                         });
 
-                        if (selectedStudent?.shift === 'Siang') {
+                        if (shiftToCheck === 'Siang') {
                             delete filteredKedisiplinan['Shalat Berjamaah'];
                             delete filteredKedisiplinan['Sholat Berjamaah']; // Legacy
                         }
@@ -289,7 +321,7 @@ export default function GuruInput() {
             console.error("Failed to load autosave", e);
         }
         return false;
-    }, [autosaveKey, selectedStudentId, selectedSubject, isPembimbing, selectedStudent]);
+    }, [autosaveKey, selectedStudentId, selectedSubject, isPembimbing, selectedStudent, selectedHalaqahId, assignedHalaqahs]);
 
     // Save to localStorage
     useEffect(() => {
@@ -334,6 +366,9 @@ export default function GuruInput() {
                 activeTahsinItems = globalTahsinItems || [];
             }
 
+            // Filter out obsolete items like "Panjang Pendek"
+            activeTahsinItems = activeTahsinItems.filter(item => item !== 'Panjang Pendek');
+
             if (existingReport) {
                 // Load Tahsin scores
                 const savedTahsin = existingReport.kognitif?.Tahsin || {};
@@ -365,7 +400,9 @@ export default function GuruInput() {
                     });
                     setAkhlak(filteredAkhlak);
 
-                    const filteredKedisiplinan = { ...defaultKedisiplinan };
+                    const currentHalaqah = assignedHalaqahs.find(h => h.id === selectedHalaqahId);
+                    const shiftToCheck = currentHalaqah?.shift || selectedStudent?.shift;
+                    const filteredKedisiplinan = createKedisiplinan(shiftToCheck);
                     // Preserve Kehadiran if exists in DB (so we pass it back)
                     if (savedKedisiplinan['Kehadiran'] !== undefined) {
                         filteredKedisiplinan['Kehadiran'] = savedKedisiplinan['Kehadiran'];
@@ -383,7 +420,7 @@ export default function GuruInput() {
                             return;
                         }
 
-                        if (k in defaultKedisiplinan) {
+                        if (k in filteredKedisiplinan) {
                             filteredKedisiplinan[k] = savedKedisiplinan[k];
                         }
                     });
@@ -401,7 +438,9 @@ export default function GuruInput() {
 
                 if (isPembimbing) {
                     setAkhlak(defaultAkhlak);
-                    setKedisiplinan(defaultKedisiplinan);
+                    const currentHalaqah = assignedHalaqahs.find(h => h.id === selectedHalaqahId);
+                    const shiftToCheck = currentHalaqah?.shift || selectedStudent?.shift;
+                    setKedisiplinan(createKedisiplinan(shiftToCheck));
                 }
             }
             setTahfidzScore(10);
@@ -548,6 +587,18 @@ export default function GuruInput() {
     const tahsinAvg = calculateAverage(tahsin);
     const akhlakAvg = calculateAverage(akhlak);
     const kedisiplinanAvg = calculateAverage(kedisiplinan);
+
+    // Cleanup obsolete items from tahsin state (e.g., "Panjang Pendek")
+    useEffect(() => {
+        if ('Panjang Pendek' in tahsin || 'Panjang-Pendek' in tahsin) {
+            setTahsin(prev => {
+                const cleaned = { ...prev };
+                delete cleaned['Panjang Pendek'];
+                delete cleaned['Panjang-Pendek'];
+                return cleaned;
+            });
+        }
+    }, [tahsin]);
 
     return (
         <div className="space-y-6 pb-20">

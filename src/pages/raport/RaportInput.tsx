@@ -21,12 +21,22 @@ const defaultAkhlak: Record<string, number> = {
     "Adab Terhadap Lingkungan": 10
 };
 
-const defaultKedisiplinan: Record<string, number> = {
-    "Shalat Berjamaah": 10,
-    "Kehadiran": 10, // Admin still sees this
-    "Tilawah & Hafalan Mandiri": 10,
-    "Kebersihan": 10,
-    "Kerapian": 10
+// Helper function to create kedisiplinan based on shift
+const createKedisiplinan = (shift?: 'Siang' | 'Sore' | null): Record<string, number> => {
+    const base: Record<string, number> = {
+        "Kehadiran": 100, // Default 100, will be calculated based on attendance
+        "Tilawah & Hafalan Mandiri": 10,
+        "Kebersihan": 10,
+        "Kerapian": 10,
+        "Ketepatan Waktu": 10
+    };
+
+    // Only add Shalat Berjamaah if NOT Siang shift
+    if (shift !== 'Siang') {
+        base["Shalat Berjamaah"] = 10;
+    }
+
+    return base;
 };
 
 const defaultKognitif = {
@@ -44,7 +54,7 @@ export default function RaportInput() {
 
     // Form State
     const [akhlak, setAkhlak] = useState<Record<string, number>>(defaultAkhlak);
-    const [kedisiplinan, setKedisiplinan] = useState<Record<string, number>>(defaultKedisiplinan);
+    const [kedisiplinan, setKedisiplinan] = useState<Record<string, number>>({});
 
     // Tahfidz State
     const [tahfidzScore, setTahfidzScore] = useState(10);
@@ -77,7 +87,7 @@ export default function RaportInput() {
         queryFn: async () => {
             const { data } = await supabase
                 .from('students')
-                .select('*, halaqah_data:halaqah(*)')
+                .select('*, halaqah_data:halaqah(*, shift)')
                 .eq('is_active', true)
                 .order('nama');
             return data as Student[];
@@ -114,12 +124,12 @@ export default function RaportInput() {
                 .from('teacher_assignments')
                 .select(`
                     *,
-                    halaqah:halaqah!halaqah_id(id, nama)
+                    halaqah:halaqah!halaqah_id(id, nama, shift)
                 `)
                 .eq('teacher_id', session!.user!.id)
                 .eq('is_active', true);
             if (error) throw error;
-            return data as (TeacherAssignment & { halaqah: { id: string; nama: string } })[];
+            return data as (TeacherAssignment & { halaqah: { id: string; nama: string; shift?: 'Siang' | 'Sore' } })[];
         }
     });
 
@@ -173,9 +183,12 @@ export default function RaportInput() {
 
             // Determine active Tahsin items
             // Priority: Halaqah Config -> Global Fallback
-            const activeTahsinItems = (student?.halaqah_data?.tahsin_items && student.halaqah_data.tahsin_items.length > 0)
+            // Filter out obsolete items like "Panjang Pendek"
+            const rawTahsinItems = (student?.halaqah_data?.tahsin_items && student.halaqah_data.tahsin_items.length > 0)
                 ? student.halaqah_data.tahsin_items
                 : (globalTahsinItems || []);
+
+            const activeTahsinItems = rawTahsinItems.filter(item => item !== 'Panjang Pendek');
 
             if (existingReport) {
                 // Load from saved report
@@ -201,9 +214,11 @@ export default function RaportInput() {
                 });
                 setAkhlak(newAkhlak);
 
-                // Migrate Kedisiplinan
+                // Migrate Kedisiplinan with shift awareness
+                const shiftToCheck = student?.halaqah_data?.shift || student?.shift;
                 const savedKedisiplinan = existingReport.kedisiplinan || {};
-                const newKedisiplinan = { ...defaultKedisiplinan };
+                const newKedisiplinan = createKedisiplinan(shiftToCheck);
+
                 Object.keys(savedKedisiplinan).forEach(k => {
                     // Rename logic
                     if (k === 'Tilawah Mandiri') {
@@ -211,7 +226,17 @@ export default function RaportInput() {
                         return;
                     }
                     if (k === 'Sholat Berjamaah') {
-                        newKedisiplinan['Shalat Berjamaah'] = savedKedisiplinan[k];
+                        // Only set if not Siang shift
+                        if (shiftToCheck !== 'Siang') {
+                            newKedisiplinan['Shalat Berjamaah'] = savedKedisiplinan[k];
+                        }
+                        return;
+                    }
+                    if (k === 'Shalat Berjamaah') {
+                        // Only set if not Siang shift
+                        if (shiftToCheck !== 'Siang') {
+                            newKedisiplinan['Shalat Berjamaah'] = savedKedisiplinan[k];
+                        }
                         return;
                     }
 
@@ -259,7 +284,10 @@ export default function RaportInput() {
                     try {
                         const draft = JSON.parse(savedDraft);
                         setAkhlak(draft.akhlak || defaultAkhlak);
-                        setKedisiplinan(draft.kedisiplinan || defaultKedisiplinan);
+
+                        // Use shift-aware kedisiplinan
+                        const shiftToCheck = student?.halaqah_data?.shift || student?.shift;
+                        setKedisiplinan(draft.kedisiplinan || createKedisiplinan(shiftToCheck));
 
                         // Apply same logic to draft
                         const draftTahsin = draft.tahsin || {};
@@ -289,7 +317,10 @@ export default function RaportInput() {
 
     const resetForm = (items: string[] = []) => {
         setAkhlak(defaultAkhlak);
-        setKedisiplinan(defaultKedisiplinan);
+
+        // Use shift-aware kedisiplinan
+        const shiftToCheck = selectedStudent?.halaqah_data?.shift || selectedStudent?.shift;
+        setKedisiplinan(createKedisiplinan(shiftToCheck));
 
         const initialTahsin: Record<string, number> = {};
         items.forEach(item => {
@@ -344,10 +375,12 @@ export default function RaportInput() {
         const a = typeof alpa === 'string' ? parseInt(alpa) || 0 : alpa;
 
         if (effDays > 0) {
-            // Formula: ((Total - (S + I + A)) / Total) * 100
-            const totalAbsence = s + i + a;
-            const realPresence = Math.max(0, effDays - totalAbsence);
-            const score = Math.round((realPresence / effDays) * 100);
+            // New Formula: Start from 100, deduct points
+            // Sakit: -1 point per day
+            // Izin: -2 points per day
+            // Alpa: -4 points per day
+            const deduction = (s * 1) + (i * 2) + (a * 4);
+            const score = Math.max(10, 100 - deduction); // Minimum score is 10
 
             // Update kedisiplinan 'Kehadiran' if it's different
             if (kedisiplinan["Kehadiran"] !== score) {
@@ -378,12 +411,38 @@ export default function RaportInput() {
     }, [akhlak, kedisiplinan, tahsin, uasTulis, uasLisan, catatan, sakit, izin, alpa, effectiveDays, selectedStudentId, activeSemester]);
 
     const selectedStudent = students?.find(s => s.id === selectedStudentId);
-    const isShiftSiang = selectedStudent?.shift === 'Siang';
+    // Priority: Halaqah Shift > Student Shift
+    const shiftToCheck = selectedStudent?.halaqah_data?.shift || selectedStudent?.shift;
+    const isShiftSiang = shiftToCheck === 'Siang';
+
+    // Update kedisiplinan when student changes to ensure correct shift-based items
+    useEffect(() => {
+        if (selectedStudent && Object.keys(kedisiplinan).length > 0) {
+            const shiftToCheck = selectedStudent.halaqah_data?.shift || selectedStudent.shift;
+            const shouldHaveShalatBerjamaah = shiftToCheck !== 'Siang';
+            const currentlyHasShalatBerjamaah = 'Shalat Berjamaah' in kedisiplinan;
+
+            // Only update if there's a mismatch
+            if (shouldHaveShalatBerjamaah !== currentlyHasShalatBerjamaah) {
+                setKedisiplinan(prev => {
+                    const next = { ...prev };
+                    if (shouldHaveShalatBerjamaah) {
+                        // Add Shalat Berjamaah if missing
+                        next['Shalat Berjamaah'] = 10;
+                    } else {
+                        // Remove Shalat Berjamaah if present
+                        delete next['Shalat Berjamaah'];
+                        delete next['Sholat Berjamaah']; // Legacy
+                    }
+                    return next;
+                });
+            }
+        }
+    }, [selectedStudent?.id, selectedStudent?.halaqah_data?.shift, selectedStudent?.shift]);
 
     // Calculations
     const akhlakAvg = calculateAverage(akhlak);
 
-    // For kedisiplinan, exclude Shalat Berjamaah if shift is Siang
     const kedisiplinanForCalc = isShiftSiang
         ? Object.fromEntries(Object.entries(kedisiplinan).filter(([key]) => key !== "Sholat Berjamaah"))
         : kedisiplinan;
@@ -403,6 +462,18 @@ export default function RaportInput() {
 
     const finalScore = settings ? calculateFinalScore(akhlakAvg, kedisiplinanAvg, kognitifScore, settings) : 0;
     const predikat = settings ? getPredikat(finalScore, settings.skala_penilaian) : '-';
+
+    // Cleanup obsolete items from tahsin state (e.g., "Panjang Pendek")
+    useEffect(() => {
+        if ('Panjang Pendek' in tahsin || 'Panjang-Pendek' in tahsin) {
+            setTahsin(prev => {
+                const cleaned = { ...prev };
+                delete cleaned['Panjang Pendek'];
+                delete cleaned['Panjang-Pendek'];
+                return cleaned;
+            });
+        }
+    }, [tahsin]);
 
     const saveMutation = useMutation({
         mutationFn: async () => {

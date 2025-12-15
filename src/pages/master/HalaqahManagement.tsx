@@ -17,6 +17,7 @@ export default function HalaqahManagement() {
     const [formData, setFormData] = useState({
         nama: '',
         guru_id: '',
+        shift: '' as 'Siang' | 'Sore' | '',
         tahsin_items: [] as string[]
     });
 
@@ -87,7 +88,7 @@ export default function HalaqahManagement() {
     });
 
     const resetForm = () => {
-        setFormData({ nama: '', guru_id: '', tahsin_items: [] });
+        setFormData({ nama: '', guru_id: '', shift: '', tahsin_items: [] });
         setEditingId(null);
     };
 
@@ -95,6 +96,7 @@ export default function HalaqahManagement() {
         setFormData({
             nama: halaqah.nama,
             guru_id: halaqah.guru_id || '',
+            shift: halaqah.shift || '',
             tahsin_items: halaqah.tahsin_items || []
         });
         setEditingId(halaqah.id);
@@ -150,6 +152,21 @@ export default function HalaqahManagement() {
                                     ))}
                                 </select>
                             </div>
+                            <div className="space-y-2">
+                                <Label>Shift (Opsional)</Label>
+                                <select
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                    value={formData.shift}
+                                    onChange={(e) => setFormData({ ...formData, shift: e.target.value as 'Siang' | 'Sore' | '' })}
+                                >
+                                    <option value="">-- Tidak ditentukan --</option>
+                                    <option value="Siang">Siang</option>
+                                    <option value="Sore">Sore</option>
+                                </select>
+                                <p className="text-xs text-muted-foreground">
+                                    Jika diisi, semua santri dalam halaqah ini akan mengikuti aturan shift ini (misal: Shift Siang tidak ada input Shalat Berjamaah).
+                                </p>
+                            </div>
 
 
 
@@ -169,6 +186,7 @@ export default function HalaqahManagement() {
                             <TableRow>
                                 <TableHead>Nama Halaqah</TableHead>
                                 <TableHead>Guru Pembimbing</TableHead>
+                                <TableHead>Shift</TableHead>
                                 <TableHead>Materi Tahsin</TableHead>
                                 <TableHead className="text-right">Aksi</TableHead>
                             </TableRow>
@@ -189,6 +207,16 @@ export default function HalaqahManagement() {
                                                 <UserIcon className="h-4 w-4 text-gray-400" />
                                                 {h.guru?.full_name || h.guru?.email || <span className="text-gray-400 italic">Belum ada guru</span>}
                                             </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            {h.shift ? (
+                                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${h.shift === 'Siang' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'
+                                                    }`}>
+                                                    {h.shift}
+                                                </span>
+                                            ) : (
+                                                <span className="text-gray-400 text-xs">-</span>
+                                            )}
                                         </TableCell>
                                         <TableCell>
                                             <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">

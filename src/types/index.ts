@@ -14,6 +14,7 @@ export interface Halaqah {
     guru_id?: string;
     is_active: boolean;
     tahsin_items?: string[];
+    shift?: 'Siang' | 'Sore'; // New field
     guru?: User; // Joined data
 }
 
