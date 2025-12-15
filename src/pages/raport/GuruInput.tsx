@@ -247,7 +247,7 @@ export default function GuruInput() {
                 }
             }
         }
-    }, [selectedStudent?.id, selectedHalaqahId, selectedStudent?.shift, assignedHalaqahs]);
+    }, [selectedStudent?.id, selectedHalaqahId, selectedStudent?.shift]);
 
     // Autosave Logic
     const autosaveKey = `autosave_${selectedStudentId}_${selectedSubject}_${activeSemester?.id}`;
