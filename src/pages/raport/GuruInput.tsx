@@ -588,18 +588,6 @@ export default function GuruInput() {
     const akhlakAvg = calculateAverage(akhlak);
     const kedisiplinanAvg = calculateAverage(kedisiplinan);
 
-    // Cleanup obsolete items from tahsin state (e.g., "Panjang Pendek")
-    useEffect(() => {
-        if ('Panjang Pendek' in tahsin || 'Panjang-Pendek' in tahsin) {
-            setTahsin(prev => {
-                const cleaned = { ...prev };
-                delete cleaned['Panjang Pendek'];
-                delete cleaned['Panjang-Pendek'];
-                return cleaned;
-            });
-        }
-    }, [tahsin]);
-
     return (
         <div className="space-y-6 pb-20">
             <div>

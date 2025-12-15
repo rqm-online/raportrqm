@@ -463,18 +463,6 @@ export default function RaportInput() {
     const finalScore = settings ? calculateFinalScore(akhlakAvg, kedisiplinanAvg, kognitifScore, settings) : 0;
     const predikat = settings ? getPredikat(finalScore, settings.skala_penilaian) : '-';
 
-    // Cleanup obsolete items from tahsin state (e.g., "Panjang Pendek")
-    useEffect(() => {
-        if ('Panjang Pendek' in tahsin || 'Panjang-Pendek' in tahsin) {
-            setTahsin(prev => {
-                const cleaned = { ...prev };
-                delete cleaned['Panjang Pendek'];
-                delete cleaned['Panjang-Pendek'];
-                return cleaned;
-            });
-        }
-    }, [tahsin]);
-
     const saveMutation = useMutation({
         mutationFn: async () => {
             if (!selectedStudentId || !activeSemester) return;
