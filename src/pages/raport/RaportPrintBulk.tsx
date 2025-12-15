@@ -130,7 +130,6 @@ export default function RaportPrintBulk() {
                 const { student, semester, akhlak, kedisiplinan, kognitif, tahfidz_progress, sakit, izin, alpa } = report;
                 const academicYear = semester.academic_year?.tahun_ajaran;
                 const guruPembimbing = student.halaqah_data?.guru;
-                const theme = 'black';
 
                 return (
                     <div
