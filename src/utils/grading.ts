@@ -1,4 +1,4 @@
-import type { SettingsLembaga } from '../types';
+
 
 export const calculateAverage = (scores: Record<string, number>): number => {
     const values = Object.values(scores);
