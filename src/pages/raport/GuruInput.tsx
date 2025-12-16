@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import type { Student, ReportCard, Semester, TeacherAssignment } from '../../types';
@@ -69,13 +69,18 @@ export default function GuruInput() {
     });
 
     // Get unique halaqahs and subjects
-    const assignedHalaqahs = (teacherAssignments
-        ?.map(a => a.halaqah)
-        .filter(v => v !== null && v !== undefined) || [])
-        .filter((v, i, a) => a.findIndex(t => t?.id === v?.id) === i);
-    const availableSubjects = selectedHalaqahId
-        ? teacherAssignments?.filter(a => a.halaqah_id === selectedHalaqahId).map(a => a.subject) || []
-        : [];
+    const assignedHalaqahs = useMemo(() => {
+        return (teacherAssignments
+            ?.map(a => a.halaqah)
+            .filter(v => v !== null && v !== undefined) || [])
+            .filter((v, i, a) => a.findIndex(t => t?.id === v?.id) === i);
+    }, [teacherAssignments]);
+
+    const availableSubjects = useMemo(() => {
+        return selectedHalaqahId
+            ? teacherAssignments?.filter(a => a.halaqah_id === selectedHalaqahId).map(a => a.subject) || []
+            : [];
+    }, [teacherAssignments, selectedHalaqahId]);
 
     // Fetch students filtered by halaqah
     const { data: students } = useQuery({
@@ -129,10 +134,10 @@ export default function GuruInput() {
         }
     });
 
-    const selectedStudent = students?.find(s => s.id === selectedStudentId);
+    const selectedStudent = useMemo(() => students?.find(s => s.id === selectedStudentId), [students, selectedStudentId]);
 
     // Get current assignment details for selected halaqah
-    const currentAssignment = teacherAssignments?.find(a => a.halaqah_id === selectedHalaqahId);
+    const currentAssignment = useMemo(() => teacherAssignments?.find(a => a.halaqah_id === selectedHalaqahId), [teacherAssignments, selectedHalaqahId]);
     const isPembimbing = currentAssignment?.role === 'pembimbing';
 
     // Auto-select from URL
