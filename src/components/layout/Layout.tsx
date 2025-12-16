@@ -40,7 +40,9 @@ export default function Layout() {
                 { href: '/student-surah', label: 'Surah per Santri', icon: BookOpen },
                 { href: '/guru/input', label: 'Input Nilai', icon: FileText },
                 { href: '/raport/leger', label: 'Leger Nilai', icon: BookOpen },
+
                 { href: '/raport/peringkat', label: 'Peringkat', icon: BookOpen },
+
             ];
         }
 
@@ -57,7 +59,9 @@ export default function Layout() {
             { href: '/academic', label: 'Tahun Ajaran', icon: BookOpen },
             { href: '/raport/input', label: 'Input Raport', icon: FileText },
             { href: '/raport/leger', label: 'Leger Nilai', icon: BookOpen },
+
             { href: '/raport/peringkat', label: 'Peringkat', icon: BookOpen },
+
             { href: '/users', label: 'Manajemen User', icon: Users },
             { href: '/settings', label: 'Pengaturan', icon: Settings },
         ];
@@ -114,7 +118,7 @@ export default function Layout() {
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 overflow-auto">
+            <main id="main-content" className="flex-1 overflow-auto">
                 <div className="p-8">
                     <Outlet />
                 </div>

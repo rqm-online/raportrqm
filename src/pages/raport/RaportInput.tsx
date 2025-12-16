@@ -8,7 +8,7 @@ import { Label } from '../../components/ui/label';
 import { ScoreInput } from '../../components/raport/ScoreInput';
 import { TahfidzInput } from '../../components/raport/TahfidzInput';
 import { calculateAverage, calculateFinalScore, formatScore, getPredikat } from '../../utils/grading';
-import { Save, Printer, Plus } from 'lucide-react';
+import { Save, Printer, Plus, ArrowUp, ArrowDown } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import { UnsavedChangesDialog } from '../../components/ui/unsaved-changes-dialog';
@@ -75,6 +75,42 @@ export default function RaportInput() {
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [initialFormState, setInitialFormState] = useState<string>('');
 
+    // Scroll State
+    const [showScrollTop, setShowScrollTop] = useState(false);
+    const [showScrollBottom, setShowScrollBottom] = useState(true);
+
+    useEffect(() => {
+        const handleScroll = () => {
+            const container = document.getElementById('main-content');
+            if (!container) return; // Should fallback to window if not found? But layout is fixed.
+
+            const position = container.scrollTop;
+            const windowHeight = container.clientHeight;
+            const fullHeight = container.scrollHeight;
+
+            // Show Top arrow if scrolled down > 300px
+            setShowScrollTop(position > 300);
+            // Show Bottom arrow if not yet at bottom (buffer 100px)
+            if (fullHeight > windowHeight) {
+                setShowScrollBottom(position < fullHeight - windowHeight - 100);
+            } else {
+                setShowScrollBottom(false);
+            }
+        };
+
+        const container = document.getElementById('main-content');
+        if (container) {
+            container.addEventListener('scroll', handleScroll);
+            handleScroll(); // Init check
+            return () => container.removeEventListener('scroll', handleScroll);
+        } else {
+            // Fallback to window just in case
+            window.addEventListener('scroll', handleScroll);
+            return () => window.removeEventListener('scroll', handleScroll);
+        }
+    }, []);
+
+
     // Get URL parameters
     const [searchParams] = useSearchParams();
 
@@ -130,6 +166,15 @@ export default function RaportInput() {
                 .eq('is_active', true);
             if (error) throw error;
             return data as (TeacherAssignment & { halaqah: { id: string; nama: string; shift?: 'Siang' | 'Sore' } })[];
+        }
+    });
+
+    // Fetch all halaqahs for filter (Admin/Global usage)
+    const { data: allHalaqahs } = useQuery({
+        queryKey: ['all_halaqahs_filter'],
+        queryFn: async () => {
+            const { data } = await supabase.from('halaqah').select('*').eq('is_active', true).order('nama');
+            return data as { id: string; nama: string }[];
         }
     });
 
@@ -573,13 +618,19 @@ export default function RaportInput() {
         );
     }
 
+    // Determine which halaqah options to show
+    const halaqahOptions = (teacherAssignments && teacherAssignments.length > 0)
+        ? assignedHalaqahs
+        : allHalaqahs;
+
     return (
         <div className="space-y-6 pb-20">
+            {/* ... Header ... */}
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-bold">Input Raport</h1>
                     <p className="text-gray-500">
-                        {activeSemester.academic_year?.tahun_ajaran} - Semester {activeSemester.nama}
+                        {activeSemester?.academic_year?.tahun_ajaran} - Semester {activeSemester?.nama}
                     </p>
                 </div>
                 {existingReport && (
@@ -593,8 +644,8 @@ export default function RaportInput() {
 
             <Card>
                 <CardContent className="pt-6 space-y-4">
-                    {/* Teacher Filters (only show if user has assignments) */}
-                    {teacherAssignments && teacherAssignments.length > 0 && (
+                    {/* Filters: Show if there are options available */}
+                    {halaqahOptions && halaqahOptions.length > 0 && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b">
                             <div className="space-y-2">
                                 <Label>Filter Halaqah</Label>
@@ -604,28 +655,31 @@ export default function RaportInput() {
                                     onChange={(e) => setSelectedHalaqahFilter(e.target.value)}
                                 >
                                     <option value="">-- Semua Halaqah --</option>
-                                    {assignedHalaqahs.map((h) => (
+                                    {halaqahOptions.map((h) => (
                                         <option key={h.id} value={h.id}>
                                             {h.nama}
                                         </option>
                                     ))}
                                 </select>
                             </div>
-                            <div className="space-y-2">
-                                <Label>Filter Materi</Label>
-                                <select
-                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                                    value={selectedSubjectFilter}
-                                    onChange={(e) => setSelectedSubjectFilter(e.target.value as 'Tahfidz' | 'Tahsin' | '')}
-                                >
-                                    <option value="">-- Semua Materi --</option>
-                                    {assignedSubjects.map((subject) => (
-                                        <option key={subject} value={subject}>
-                                            {subject}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
+                            {/* Subject filter only relevant for teachers */}
+                            {teacherAssignments && teacherAssignments.length > 0 && (
+                                <div className="space-y-2">
+                                    <Label>Filter Materi</Label>
+                                    <select
+                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                        value={selectedSubjectFilter}
+                                        onChange={(e) => setSelectedSubjectFilter(e.target.value as 'Tahfidz' | 'Tahsin' | '')}
+                                    >
+                                        <option value="">-- Semua Materi --</option>
+                                        {assignedSubjects.map((subject) => (
+                                            <option key={subject} value={subject}>
+                                                {subject}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -639,9 +693,16 @@ export default function RaportInput() {
                             <option value="">-- Pilih Santri --</option>
                             {students
                                 ?.filter(s => {
-                                    // If teacher has assignments, filter by selected halaqah
-                                    if (teacherAssignments && teacherAssignments.length > 0 && selectedHalaqahFilter) {
+                                    // Filter by selected halaqah
+                                    if (selectedHalaqahFilter) {
                                         return s.halaqah_id === selectedHalaqahFilter;
+                                    }
+                                    // If teacher login but NO halaqah selected (e.g. "Semua Halaqah"), 
+                                    // implicitly filter to ONLY assigned halaqahs validation?
+                                    // Current logic: If admin, show all. If teacher, show assigned.
+                                    // If teacherAssignments exist, we should restrict students to assignedHalaqahs list if no filter selected?
+                                    if (teacherAssignments && teacherAssignments.length > 0 && !selectedHalaqahFilter) {
+                                        return assignedHalaqahs.some(h => h.id === s.halaqah_id);
                                     }
                                     return true;
                                 })
@@ -1023,6 +1084,35 @@ export default function RaportInput() {
                 onConfirm={confirmNavigation}
                 onCancel={cancelNavigation}
             />
+            {/* Scroll Helpers */}
+            <div className="fixed bottom-8 right-8 flex flex-col gap-2 z-50 print:hidden">
+                <Button
+                    onClick={() => {
+                        const container = document.getElementById('main-content');
+                        container?.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    size="icon"
+                    variant="secondary"
+                    className={`rounded-full shadow-lg opacity-80 hover:opacity-100 transition-all duration-300 ${showScrollTop ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none absolute'
+                        }`}
+                    title="Ke Atas"
+                >
+                    <ArrowUp className="h-6 w-6" />
+                </Button>
+                <Button
+                    onClick={() => {
+                        const container = document.getElementById('main-content');
+                        container?.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+                    }}
+                    size="icon"
+                    variant="secondary"
+                    className={`rounded-full shadow-lg opacity-80 hover:opacity-100 transition-all duration-300 ${showScrollBottom ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none absolute'
+                        }`}
+                    title="Ke Bawah"
+                >
+                    <ArrowDown className="h-6 w-6" />
+                </Button>
+            </div>
         </div>
     );
 }
