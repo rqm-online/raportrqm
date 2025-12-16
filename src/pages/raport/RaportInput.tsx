@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
-import type { Student, SettingsLembaga, ReportCard, Semester, TeacherAssignment, Halaqah } from '../../types';
+import type { Student, SettingsLembaga, ReportCard, Semester, TeacherAssignment } from '../../types';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Label } from '../../components/ui/label';
@@ -25,10 +25,10 @@ const defaultAkhlak: Record<string, number> = {
 const createKedisiplinan = (shift?: 'Siang' | 'Sore' | null): Record<string, number> => {
     const base: Record<string, number> = {
         "Kehadiran": 100, // Default 100, will be calculated based on attendance
+        "Ketepatan Waktu": 100, // Manual input, default 100
         "Tilawah & Hafalan Mandiri": 10,
         "Kebersihan": 10,
-        "Kerapian": 10,
-        "Ketepatan Waktu": 10
+        "Kerapian": 10
     };
 
     // Only add Shalat Berjamaah if NOT Siang shift
@@ -51,9 +51,6 @@ export default function RaportInput() {
     const [activeSemester, setActiveSemester] = useState<Semester | null>(null);
     const [selectedHalaqahFilter, setSelectedHalaqahFilter] = useState<string>('');
     const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<'Tahfidz' | 'Tahsin' | ''>('');
-
-    // Bulk print state
-    const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
 
     // Form State
     const [akhlak, setAkhlak] = useState<Record<string, number>>(defaultAkhlak);
@@ -107,19 +104,6 @@ export default function RaportInput() {
                 .eq('is_active', true)
                 .order('urutan');
             return data?.map(i => i.nama_item) || [];
-        }
-    });
-
-    // Fetch Halaqah List for filter
-    const { data: halaqahList } = useQuery({
-        queryKey: ['halaqah_list'],
-        queryFn: async () => {
-            const { data } = await supabase
-                .from('halaqah')
-                .select('*')
-                .eq('is_active', true)
-                .order('nama');
-            return data as Halaqah[];
         }
     });
 
@@ -234,6 +218,11 @@ export default function RaportInput() {
                 const shiftToCheck = student?.halaqah_data?.shift || student?.shift;
                 const savedKedisiplinan = existingReport.kedisiplinan || {};
                 const newKedisiplinan = createKedisiplinan(shiftToCheck);
+
+                // Migrate old data: if "Ketepatan Waktu" doesn't exist, copy from "Kehadiran"
+                if (savedKedisiplinan["Kehadiran"] !== undefined && savedKedisiplinan["Ketepatan Waktu"] === undefined) {
+                    savedKedisiplinan["Ketepatan Waktu"] = savedKedisiplinan["Kehadiran"];
+                }
 
                 Object.keys(savedKedisiplinan).forEach(k => {
                     // Rename logic
@@ -476,8 +465,20 @@ export default function RaportInput() {
         kognitifScore = (tahfidzScore + tahsinAvg + uasTulis + uasLisan) / 4;
     }
 
-    const finalScore = settings ? calculateFinalScore(akhlakAvg, kedisiplinanAvg, kognitifScore, settings) : 0;
-    const predikat = settings ? getPredikat(finalScore, settings.skala_penilaian) : '-';
+    const finalScore = calculateFinalScore(akhlakAvg, kedisiplinanAvg, kognitifScore);
+    const predikat = settings ? getPredikat(finalScore, settings.skala_penilaian) : getPredikat(finalScore);
+
+    // Cleanup obsolete items from tahsin state (e.g., "Panjang Pendek")
+    useEffect(() => {
+        if ('Panjang Pendek' in tahsin || 'Panjang-Pendek' in tahsin) {
+            setTahsin(prev => {
+                const cleaned = { ...prev };
+                delete cleaned['Panjang Pendek'];
+                delete cleaned['Panjang-Pendek'];
+                return cleaned;
+            });
+        }
+    }, [tahsin]);
 
     const saveMutation = useMutation({
         mutationFn: async () => {
@@ -628,27 +629,6 @@ export default function RaportInput() {
                         </div>
                     )}
 
-                    {/* Halaqah Filter - For both Admin and Teacher */}
-                    <div className="space-y-2">
-                        <Label>Filter Halaqah</Label>
-                        <select
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            value={selectedHalaqahFilter}
-                            onChange={(e) => {
-                                setSelectedHalaqahFilter(e.target.value);
-                                setSelectedStudentId(''); // Reset student selection
-                                setSelectedStudents([]); // Reset bulk selection
-                            }}
-                        >
-                            <option value="">-- Semua Halaqah --</option>
-                            {(teacherAssignments && teacherAssignments.length > 0 ? assignedHalaqahs : halaqahList)?.map((h) => (
-                                <option key={h.id} value={h.id}>
-                                    {h.nama}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
                     <div className="space-y-2">
                         <Label>Pilih Santri</Label>
                         <select
@@ -659,8 +639,8 @@ export default function RaportInput() {
                             <option value="">-- Pilih Santri --</option>
                             {students
                                 ?.filter(s => {
-                                    // Filter by halaqah if selected
-                                    if (selectedHalaqahFilter) {
+                                    // If teacher has assignments, filter by selected halaqah
+                                    if (teacherAssignments && teacherAssignments.length > 0 && selectedHalaqahFilter) {
                                         return s.halaqah_id === selectedHalaqahFilter;
                                     }
                                     return true;
@@ -671,81 +651,6 @@ export default function RaportInput() {
                             }
                         </select>
                     </div>
-
-                    {/* Bulk Print Section */}
-                    {!selectedStudentId && students && students.length > 0 && (
-                        <div className="space-y-3 border-t pt-4">
-                            <div className="flex items-center justify-between">
-                                <Label>Cetak Raport Massal</Label>
-                                {selectedStudents.length > 0 && (
-                                    <span className="text-sm text-muted-foreground">
-                                        {selectedStudents.length} santri dipilih
-                                    </span>
-                                )}
-                            </div>
-
-                            <div className="max-h-60 overflow-y-auto border rounded-md p-3 space-y-2">
-                                <div className="flex items-center space-x-2 pb-2 border-b">
-                                    <input
-                                        type="checkbox"
-                                        id="select-all"
-                                        className="h-4 w-4 rounded border-gray-300"
-                                        checked={selectedStudents.length === students.filter(s => !selectedHalaqahFilter || s.halaqah_id === selectedHalaqahFilter).length && students.filter(s => !selectedHalaqahFilter || s.halaqah_id === selectedHalaqahFilter).length > 0}
-                                        onChange={(e) => {
-                                            const filteredStudents = students.filter(s => !selectedHalaqahFilter || s.halaqah_id === selectedHalaqahFilter);
-                                            if (e.target.checked) {
-                                                setSelectedStudents(filteredStudents.map(s => s.id));
-                                            } else {
-                                                setSelectedStudents([]);
-                                            }
-                                        }}
-                                    />
-                                    <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
-                                        Pilih Semua
-                                    </label>
-                                </div>
-
-                                {students
-                                    .filter(s => !selectedHalaqahFilter || s.halaqah_id === selectedHalaqahFilter)
-                                    .map(s => (
-                                        <div key={s.id} className="flex items-center space-x-2">
-                                            <input
-                                                type="checkbox"
-                                                id={`student-${s.id}`}
-                                                className="h-4 w-4 rounded border-gray-300"
-                                                checked={selectedStudents.includes(s.id)}
-                                                onChange={(e) => {
-                                                    if (e.target.checked) {
-                                                        setSelectedStudents([...selectedStudents, s.id]);
-                                                    } else {
-                                                        setSelectedStudents(selectedStudents.filter(id => id !== s.id));
-                                                    }
-                                                }}
-                                            />
-                                            <label htmlFor={`student-${s.id}`} className="text-sm cursor-pointer flex-1">
-                                                {s.nama} ({s.nis})
-                                            </label>
-                                        </div>
-                                    ))
-                                }
-                            </div>
-
-                            <Button
-                                onClick={() => {
-                                    if (selectedStudents.length === 0) {
-                                        alert('Pilih minimal 1 santri untuk dicetak');
-                                        return;
-                                    }
-                                    const url = `/raport/print-bulk?students=${selectedStudents.join(',')}&semester=${activeSemester?.id}`;
-                                    window.open(url, '_blank');
-                                }}
-                                disabled={selectedStudents.length === 0}
-                                className="w-full"
-                            >
-                                Cetak {selectedStudents.length} Raport Terpilih
-                            </Button>
-                        </div>
-                    )}
                     {selectedStudent && isShiftSiang && (
                         <p className="text-sm text-blue-600 mt-2">
                             ℹ️ Santri shift Siang - Nilai Shalat Berjamaah tidak diinput

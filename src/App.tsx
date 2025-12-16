@@ -17,7 +17,6 @@ import LegerNilai from './pages/raport/LegerNilai';
 import Peringkat from './pages/raport/Peringkat';
 import RaportPrint from './pages/raport/RaportPrint';
 import RaportPrintBlank from './pages/raport/RaportPrintBlank';
-import RaportPrintBulk from './pages/raport/RaportPrintBulk';
 import Dashboard from './pages/dashboard/Dashboard';
 import UserManagement from './pages/users/UserManagement';
 import TahsinManagement from './pages/tahsin/TahsinManagement';
@@ -53,7 +52,6 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/print/blank" element={<RaportPrintBlank />} />
             <Route path="/print/:id" element={<RaportPrint />} />
-            <Route path="/raport/print-bulk" element={<RaportPrintBulk />} />
             <Route element={<Layout />}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/users" element={<UserManagement />} />

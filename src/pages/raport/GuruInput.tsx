@@ -69,18 +69,14 @@ export default function GuruInput() {
     });
 
     // Get unique halaqahs and subjects
-    const assignedHalaqahs = useMemo(() => {
-        return (teacherAssignments
-            ?.map(a => a.halaqah)
-            .filter(v => v !== null && v !== undefined) || [])
-            .filter((v, i, a) => a.findIndex(t => t?.id === v?.id) === i);
-    }, [teacherAssignments]);
+    const assignedHalaqahs = useMemo(() => (teacherAssignments
+        ?.map(a => a.halaqah)
+        .filter(v => v !== null && v !== undefined) || [])
+        .filter((v, i, a) => a.findIndex(t => t?.id === v?.id) === i), [teacherAssignments]);
 
-    const availableSubjects = useMemo(() => {
-        return selectedHalaqahId
-            ? teacherAssignments?.filter(a => a.halaqah_id === selectedHalaqahId).map(a => a.subject) || []
-            : [];
-    }, [teacherAssignments, selectedHalaqahId]);
+    const availableSubjects = useMemo(() => selectedHalaqahId
+        ? teacherAssignments?.filter(a => a.halaqah_id === selectedHalaqahId).map(a => a.subject) || []
+        : [], [teacherAssignments, selectedHalaqahId]);
 
     // Fetch students filtered by halaqah
     const { data: students } = useQuery({
@@ -134,10 +130,32 @@ export default function GuruInput() {
         }
     });
 
-    const selectedStudent = useMemo(() => students?.find(s => s.id === selectedStudentId), [students, selectedStudentId]);
+    // Fetch existing Tahfidz Score (for calculation)
+    const { data: existingTahfidzAvg = 0 } = useQuery({
+        queryKey: ['tahfidz_avg', existingReport?.id],
+        enabled: !!existingReport?.id,
+        queryFn: async () => {
+            const { data } = await supabase
+                .from('tahfidz_progress')
+                .select('kb, kh')
+                .eq('report_card_id', existingReport!.id);
+
+            if (!data || data.length === 0) return 0;
+
+            let total = 0;
+            let count = 0;
+            data.forEach(d => {
+                if (d.kb) { total += d.kb; count++; }
+                if (d.kh) { total += d.kh; count++; }
+            });
+            return count > 0 ? total / count : 0;
+        }
+    });
+
+    const selectedStudent = students?.find(s => s.id === selectedStudentId);
 
     // Get current assignment details for selected halaqah
-    const currentAssignment = useMemo(() => teacherAssignments?.find(a => a.halaqah_id === selectedHalaqahId), [teacherAssignments, selectedHalaqahId]);
+    const currentAssignment = teacherAssignments?.find(a => a.halaqah_id === selectedHalaqahId);
     const isPembimbing = currentAssignment?.role === 'pembimbing';
 
     // Auto-select from URL
@@ -201,13 +219,12 @@ export default function GuruInput() {
         'Adab Terhadap Lingkungan': 10
     };
 
-    // Helper function to create kedisiplinan based on shift (no Kehadiran for teachers)
+    // Helper function to create kedisiplinan based on shift (no Kehadiran/Ketepatan Waktu for teachers)
     const createKedisiplinan = (shift?: 'Siang' | 'Sore' | null): Record<string, number> => {
         const base: Record<string, number> = {
             'Tilawah & Hafalan Mandiri': 10,
             'Kebersihan': 10,
-            'Kerapian': 10,
-            'Ketepatan Waktu': 10
+            'Kerapian': 10
         };
 
         // Only add Shalat Berjamaah if NOT Siang shift
@@ -218,7 +235,7 @@ export default function GuruInput() {
         return base;
     };
 
-    // Note: Kehadiran is loaded from DB but hidden from Teacher input to prevent overwrite of Admin data
+    // Note: Kehadiran & Ketepatan Waktu are loaded from DB but hidden from Teacher input to prevent overwrite of Admin data
     const [akhlak, setAkhlak] = useState<Record<string, number>>(defaultAkhlak);
     const [kedisiplinan, setKedisiplinan] = useState<Record<string, number>>({});
 
@@ -252,7 +269,7 @@ export default function GuruInput() {
                 }
             }
         }
-    }, [selectedStudent?.id, selectedHalaqahId, selectedStudent?.shift]);
+    }, [selectedStudent?.id, selectedHalaqahId, selectedStudent?.shift, assignedHalaqahs]);
 
     // Autosave Logic
     const autosaveKey = `autosave_${selectedStudentId}_${selectedSubject}_${activeSemester?.id}`;
@@ -294,9 +311,16 @@ export default function GuruInput() {
                         const shiftToCheck = currentHalaqah?.shift || selectedStudent?.shift;
                         const filteredKedisiplinan = createKedisiplinan(shiftToCheck);
 
-                        // Preserve Kehadiran from autosave if it exists (hidden but maintained)
+                        // Initialize hidden fields (will be preserved from autosave/DB but not shown to teachers)
+                        filteredKedisiplinan['Kehadiran'] = 100;
+                        filteredKedisiplinan['Ketepatan Waktu'] = 100;
+
+                        // Preserve Kehadiran & Ketepatan Waktu from autosave if they exist (hidden but maintained)
                         if (data.kedisiplinan['Kehadiran'] !== undefined) {
                             filteredKedisiplinan['Kehadiran'] = data.kedisiplinan['Kehadiran'];
+                        }
+                        if (data.kedisiplinan['Ketepatan Waktu'] !== undefined) {
+                            filteredKedisiplinan['Ketepatan Waktu'] = data.kedisiplinan['Ketepatan Waktu'];
                         }
 
                         Object.keys(data.kedisiplinan).forEach(k => {
@@ -408,9 +432,22 @@ export default function GuruInput() {
                     const currentHalaqah = assignedHalaqahs.find(h => h.id === selectedHalaqahId);
                     const shiftToCheck = currentHalaqah?.shift || selectedStudent?.shift;
                     const filteredKedisiplinan = createKedisiplinan(shiftToCheck);
-                    // Preserve Kehadiran if exists in DB (so we pass it back)
+
+                    // Initialize hidden fields (will be preserved from DB but not shown to teachers)
+                    filteredKedisiplinan['Kehadiran'] = 100;
+                    filteredKedisiplinan['Ketepatan Waktu'] = 100;
+
+                    // Migrate old data: if "Ketepatan Waktu" doesn't exist, copy from "Kehadiran"
+                    if (savedKedisiplinan['Kehadiran'] !== undefined && savedKedisiplinan['Ketepatan Waktu'] === undefined) {
+                        savedKedisiplinan['Ketepatan Waktu'] = savedKedisiplinan['Kehadiran'];
+                    }
+
+                    // Preserve Kehadiran & Ketepatan Waktu if they exist in DB (so we pass them back)
                     if (savedKedisiplinan['Kehadiran'] !== undefined) {
                         filteredKedisiplinan['Kehadiran'] = savedKedisiplinan['Kehadiran'];
+                    }
+                    if (savedKedisiplinan['Ketepatan Waktu'] !== undefined) {
+                        filteredKedisiplinan['Ketepatan Waktu'] = savedKedisiplinan['Ketepatan Waktu'];
                     }
 
                     Object.keys(savedKedisiplinan).forEach(k => {
@@ -469,6 +506,18 @@ export default function GuruInput() {
 
 
 
+    // Cleanup obsolete items from tahsin state (e.g., "Panjang Pendek")
+    useEffect(() => {
+        if ('Panjang Pendek' in tahsin || 'Panjang-Pendek' in tahsin) {
+            setTahsin(prev => {
+                const cleaned = { ...prev };
+                delete cleaned['Panjang Pendek'];
+                delete cleaned['Panjang-Pendek'];
+                return cleaned;
+            });
+        }
+    }, [tahsin]);
+
     // Save mutation
     const saveMutation = useMutation({
         mutationFn: async () => {
@@ -496,12 +545,34 @@ export default function GuruInput() {
                 payload.uas_tulis = uasTulis;
                 payload.uas_lisan = uasLisan;
 
-                // Recalculate kognitif score
-                const tahfidzScoreFromReport = currentReport?.kognitif?.Tahfidz ? calculateAverage(currentReport.kognitif.Tahfidz) : 10;
-                payload.nilai_akhir_kognitif = (tahfidzScoreFromReport + tahsinAvg + uasTulis + uasLisan) / 4;
+                // Recalculate kognitif score using correct Tahfidz average
+                const finalTahfidz = existingTahfidzAvg || 0;
+
+                if (settings?.show_uas_lisan === false) {
+                    payload.nilai_akhir_kognitif = (finalTahfidz + tahsinAvg + uasTulis) / 3;
+                } else {
+                    payload.nilai_akhir_kognitif = (finalTahfidz + tahsinAvg + uasTulis + uasLisan) / 4;
+                }
             } else if (selectedSubject === 'Tahfidz') {
-                // For Tahfidz, we'll update via tahfidz_progress table
-                // Keep kognitif as is, just update tahfidz_progress
+                // Calculate new Tahfidz Average from 'tahfidzProgress' state being saved
+                let total = 0;
+                let count = 0;
+                Object.values(tahfidzProgress).forEach(v => {
+                    if (v.kb) { total += v.kb; count++; }
+                    if (v.kh) { total += v.kh; count++; }
+                });
+                const newTahfidzAvg = count > 0 ? total / count : 0;
+
+                // Get existing other scores from DB report
+                const currentTahsinAvg = currentReport?.kognitif?.Tahsin ? calculateAverage(currentReport.kognitif.Tahsin) : 0;
+                const currentUasTulis = currentReport?.uas_tulis || 0;
+                const currentUasLisan = currentReport?.uas_lisan || 0;
+
+                if (settings?.show_uas_lisan === false) {
+                    payload.nilai_akhir_kognitif = (newTahfidzAvg + currentTahsinAvg + currentUasTulis) / 3;
+                } else {
+                    payload.nilai_akhir_kognitif = (newTahfidzAvg + currentTahsinAvg + currentUasTulis + currentUasLisan) / 4;
+                }
             }
 
             // If Pembimbing, save Akhlak & Kedisiplinan
@@ -592,6 +663,8 @@ export default function GuruInput() {
     const tahsinAvg = calculateAverage(tahsin);
     const akhlakAvg = calculateAverage(akhlak);
     const kedisiplinanAvg = calculateAverage(kedisiplinan);
+
+
 
     return (
         <div className="space-y-6 pb-20">
@@ -755,7 +828,7 @@ export default function GuruInput() {
                                 </CardHeader>
                                 <CardContent className="space-y-4">
                                     {Object.entries(kedisiplinan)
-                                        .filter(([key]) => key !== 'Kehadiran') // Hide Kehadiran from Teachers
+                                        .filter(([key]) => key !== 'Kehadiran' && key !== 'Ketepatan Waktu') // Hide Kehadiran & Ketepatan Waktu from Teachers
                                         .map(([key, val]) => (
                                             <ScoreInput
                                                 key={key}

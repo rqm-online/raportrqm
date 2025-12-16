@@ -10,15 +10,11 @@ export const calculateAverage = (scores: Record<string, number>): number => {
 export const calculateFinalScore = (
     akhlakAvg: number,
     kedisiplinanAvg: number,
-    kognitifAvg: number,
-    settings: SettingsLembaga
+    kognitifAvg: number
 ): number => {
-    const total =
-        (akhlakAvg * settings.bobot_akhlak) +
-        (kedisiplinanAvg * settings.bobot_kedisiplinan) +
-        (kognitifAvg * settings.bobot_kognitif);
-
-    return total / 100;
+    // Simple average: (Akhlak + Kedisiplinan + Kognitif) / 3
+    // No longer using weighted average from settings
+    return (akhlakAvg + kedisiplinanAvg + kognitifAvg) / 3;
 };
 
 // New grading scale
@@ -32,12 +28,12 @@ export const getPredikat = (score: number, scale?: Record<string, number>): stri
         return 'E'; // Default fallback
     }
 
-    // Default hardcoded scale
+    // Default hardcoded scale (updated)
     if (score >= 90) return 'A';
     if (score >= 80) return 'B';
     if (score >= 70) return 'C';
-    if (score >= 65) return 'D';
-    return 'E';
+    if (score < 70) return 'D';
+    return 'D'; // Fallback
 };
 
 // Generate motivational message based on grade
