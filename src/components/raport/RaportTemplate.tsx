@@ -69,7 +69,7 @@ export function RaportTemplate({
 
                 // Add any items that are in halaqahItems but not in master (legacy/custom?)
                 const masterNames = tahsinMasterItems.map(m => m.nama_item);
-                const extraItems = halaqahItems.filter(i => !masterNames.includes(i));
+                const extraItems = halaqahItems.filter((i: string) => !masterNames.includes(i));
                 itemsToRender = [...itemsToRender, ...extraItems];
             } else {
                 itemsToRender = halaqahItems;
